@@ -25,10 +25,7 @@ Slack・メール・会議録画から情報を自動収集し、プロジェク
 ## ローカル起動
 
 ```bash
-# 1. データ層を起動（PostgreSQL / Redis / Chroma）
-docker compose -f infra/docker-compose.yml up -d
-
-# 2. アプリ層を一括起動（Rails / Next.js / Sidekiq）
+# 1. アプリ層を一括起動（Rails / Next.js ）
 foreman start -f Procfile.dev
 ```
 

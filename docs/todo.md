@@ -9,68 +9,76 @@
 **この Phase で使うインフラ: PostgreSQL のみ（Redis / Chroma は Phase 2 で追加）**
 
 ### 0.1 リポジトリ・環境構築
-- [ ] Git リポジトリ初期化 (`git init`)
-- [ ] `.gitignore` 作成（Ruby / Node.js / `.env` 除外）
+- [x] Git リポジトリ初期化 (`git init`)
+- [x] `.gitignore` 作成（Ruby / Node.js / `.env` 除外）
 - [ ] `infra/docker-compose.yml` 作成（**PostgreSQL のみ**）
-- [ ] `.env.example` 作成（全環境変数を列挙）
-- [ ] `Procfile.dev` 作成（rails / next の一括起動）
-- [ ] `README.md` にローカルセットアップ手順を記載
+- [x] `.env.example` 作成（全環境変数を列挙）
+- [x] `Procfile.dev` 作成（rails / next の一括起動）
+- [x] `README.md` にローカルセットアップ手順を記載
 
-### 0.2 バックエンド初期化（Rails）
-- [ ] Rails 7.2 API アプリ作成 (`rails new backend --api --database=postgresql`)
-- [ ] `Gemfile` に Phase 0 で必要な gem を追加（下記参照）
+### 0.2 フロントエンド初期化（最新 Node.js + Next.js）
+- [x] Node.js バージョン確認・設定（`.node-version` 追加、nodebrew v25.6.1）
+- [x] Next.js 最新版プロジェクト作成（Next.js 16.1.6）
+- [x] shadcn/ui 初期化（`npx shadcn@latest init`）
+- [x] 基本コンポーネントを追加（button / card / badge / dialog / table / tabs / skeleton / sonner / command / navigation-menu / avatar / input / textarea / select / form / sheet / separator / tooltip）
+- [x] 環境変数（`NEXT_PUBLIC_API_URL=http://localhost:3001`）設定
+- [x] グローバルレイアウト（サイドバー + ヘッダー）を shadcn/ui で作成
+
+### 0.3 Workspace / Project / Task 作成 UI（フロントのみ・モックデータ）
+- [ ] `zustand` でクライアントステート管理セットアップ
+- [ ] Workspace 一覧・作成・編集 UI（`Table` + `Dialog` + `Form`）
+- [ ] Project 一覧・作成・編集 UI（Workspace に紐づく、`Card` グリッド）
+- [ ] Task 一覧・作成・編集 UI（Project に紐づく、`Dialog` + `Form`）
+- [ ] カンバンボード（`@dnd-kit/core` + `Card` + `Badge` でステータス管理）
+- [ ] タスクカード（優先度・担当者・期日を `Badge` / `Avatar` で表示）
+- [ ] タスク詳細モーダル（`Dialog` + 全フィールド編集）
+- [ ] ローディング・エラー状態（`Skeleton` / `Sonner` Toast）
+- [ ] モックデータでの E2E 動作確認（Workspace → Project → Task 作成・移動）
+
+### 0.4 バックエンド初期化（Rails）
+- [ ] Rails 最新版 API アプリ作成（`rails new backend --api --database=postgresql`）
+- [ ] `Gemfile` に最小構成の gem を追加（下記参照）
 - [ ] `database.yml` のローカル DB 接続設定
 - [ ] `rails db:create` でデータベース作成確認
 - [ ] `dotenv-rails` で `.env` 読み込み設定
-- [ ] CORS 設定（`rack-cors` gem、localhost:3000 を許可）
-- [ ] ヘルスチェックエンドポイント (`GET /up`) 確認
+- [ ] CORS 設定（`rack-cors` gem、フロントエンドのポートを許可）
+- [ ] ヘルスチェックエンドポイント（`GET /up`）確認
 
-**Phase 0 の gem（最小構成）:**
+**Phase 0.4 の gem（最小構成）:**
 ```ruby
 # Gemfile
 gem 'dotenv-rails'
 gem 'rack-cors'
 ```
 
-### 0.3 フロントエンド初期化（Next.js + shadcn/ui）
-- [ ] Next.js 15 プロジェクト作成 (`npx create-next-app@latest frontend --typescript --tailwind --app`)
-- [ ] shadcn/ui 初期化 (`npx shadcn@latest init`)
-- [ ] 基本コンポーネントを追加（button / card / badge / dialog / table / tabs / skeleton / sonner / command / navigation-menu）
-- [ ] 環境変数 (`NEXT_PUBLIC_API_URL=http://localhost:3001`) 設定
-- [ ] グローバルレイアウト（サイドバー + ヘッダー）を shadcn/ui で作成
-- [ ] API クライアント (`lib/api.ts`) の基本実装
+### 0.5 バックエンド開発 + フロントエンド繋ぎこみ
+- [ ] `Workspace` マイグレーション・モデル・CRUD API（`Api::V1::WorkspacesController`）
+- [ ] `Project` マイグレーション・モデル・CRUD API（`Api::V1::ProjectsController`）
+- [ ] `Task` マイグレーション・モデル（status enum）・CRUD API（`Api::V1::TasksController`）
+- [ ] `Resource` / `TaskAssignment` マイグレーション・モデル作成
+- [ ] シードデータ作成（`db/seeds.rb`）で動作確認用サンプルを投入
+- [ ] API クライアント（`lib/api.ts`）の実装（fetch wrapper + 型定義）
+- [ ] フロントエンドをモックデータから API 接続に切り替え
+- [ ] ドラッグ＆ドロップによるタスクステータス変更（`PATCH /api/v1/tasks/:id`）
+- [ ] E2E での動作確認（Workspace 作成 → Project 作成 → Task 作成・移動）
 
 ---
 
-## Phase 1: ダッシュボード UI + タスク管理
+## Phase 1: ダッシュボード + リソース管理 UI
 
-**Phase 1 が完了するとローカルで動く UI が手に入る。**
+**Phase 0 完了後、全体サマリーと高度な管理機能を追加する。**
 **バックエンドは PostgreSQL のみ。Redis / Sidekiq 不要。**
 
-### 1.1 プロジェクト・タスク API（Rails）
-- [ ] `Project` マイグレーション・モデル作成
-- [ ] `Task` マイグレーション・モデル作成（status enum 定義）
-- [ ] `Resource` マイグレーション・モデル作成
-- [ ] `TaskAssignment` マイグレーション・モデル作成
-- [ ] `Api::V1::ProjectsController` 実装（CRUD）
-- [ ] `Api::V1::TasksController` 実装（CRUD + status 変更）
-- [ ] `Api::V1::ResourcesController` 実装（CRUD）
-- [ ] シードデータ作成 (`db/seeds.rb`) で動作確認用サンプルを投入
-
-### 1.2 共通 UI
-- [ ] グローバルナビゲーション（`NavigationMenu` + `Sheet` でサイドバー）
+### 1.1 ダッシュボード（サマリービュー）
+- [ ] Workspace / Project の統計サマリーカード（`Card` + `Badge`）
+- [ ] タスク進捗グラフ（Recharts `BarChart` / `PieChart`）
+- [ ] 直近のアクティビティフィード
 - [ ] プロジェクト選択コンポーネント（`Command` / `Popover`）
-- [ ] ローディング状態（`Skeleton` コンポーネント）
-- [ ] エラーバウンダリ + `Sonner` (Toast) 通知
 
-### 1.3 タスク管理（カンバンボード）
-- [ ] `@dnd-kit/core` インストール
-- [ ] カンバンボードコンポーネント作成
-- [ ] カラム（ToDo / In Progress / Done / Blocked）を `Card` で表示
-- [ ] タスクカード（`Card` + `Badge` + `Avatar` で優先度・担当者・期日表示）
-- [ ] ドラッグ＆ドロップでステータス変更（`PATCH /api/v1/tasks/:id`）
-- [ ] タスク詳細モーダル（`Dialog` + ソースイベントへのリンク付き）
-- [ ] タスク手動作成フォーム（`Dialog` + `Form` + `Input`）
+### 1.2 リソース管理 UI
+- [ ] リソース一覧・登録 UI（`Table` + `Dialog`）
+- [ ] タスク割り当てビュー
+- [ ] 稼働率ヒートマップ（Recharts）
 
 ---
 
@@ -227,9 +235,14 @@ gem 'rack-cors'
 ## ロードマップ
 
 ```
-Phase 0  基盤セットアップ（PostgreSQL のみ）
+Phase 0  基盤セットアップ
+    0.1  リポジトリ・環境構築
+    0.2  フロントエンド初期化（最新 Node.js + Next.js）  ← 今ここ
+    0.3  Workspace / Project / Task UI（フロントのみ・モックデータ）
+    0.4  バックエンド初期化（Rails）
+    0.5  バックエンド開発 + フロントエンド繋ぎこみ
     ↓
-Phase 1  ダッシュボード UI + タスク管理  ← まずここを動かす
+Phase 1  ダッシュボード + リソース管理 UI
     ↓
 Phase 2  Redis / Chroma 導入 + コアエンジン（LLM 分析）
     ↓
@@ -237,7 +250,7 @@ Phase 3  データ収集（Slack → Email → Meeting の順）
     ↓
 Phase 4  エージェント実行（Claude Code / Codex）
     ↓
-Phase 5  WBS + リソース管理 UI
+Phase 5  WBS + リソース管理 UI（高度な機能）
     ↓
 Phase 6  テスト・品質向上
 ```
@@ -248,11 +261,15 @@ Phase 6  テスト・品質向上
 
 | Phase | 工数目安 |
 |---|---|
-| Phase 0（基盤） | 1〜2日 |
-| Phase 1（ダッシュボード + タスク管理） | 4〜6日 |
+| Phase 0.1（リポジトリ・環境構築） | 0.5日 ✅ 大半完了 |
+| Phase 0.2（フロントエンド初期化） | 0.5〜1日 |
+| Phase 0.3（Workspace/Project/Task UI） | 2〜3日 |
+| Phase 0.4（バックエンド初期化） | 0.5〜1日 |
+| Phase 0.5（BE 開発 + 繋ぎこみ） | 2〜3日 |
+| Phase 1（ダッシュボード + リソース管理） | 2〜3日 |
 | Phase 2（Redis/Chroma + コアエンジン） | 4〜6日 |
 | Phase 3（収集） | 5〜7日 |
 | Phase 4（エージェント実行） | 4〜6日 |
-| Phase 5（WBS + リソース管理） | 3〜5日 |
+| Phase 5（WBS + リソース管理 高度機能） | 3〜5日 |
 | Phase 6（統合・品質） | 2〜4日 |
-| **合計** | **約 23〜36日** |
+| **合計** | **約 26〜40日** |
