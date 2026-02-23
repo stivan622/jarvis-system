@@ -99,24 +99,6 @@ function computeLayout(events: ScheduleEvent[]): LayoutEvent[] {
   return result;
 }
 
-// ---- 連続予定判定 ----
-// あるイベントの直前/直後に別のイベントがぴったり接しているか
-function getAdjacentFlags(event: ScheduleEvent, allEvents: ScheduleEvent[]) {
-  const end = event.startMinutes + event.durationMinutes;
-  const hasPrev = allEvents.some(
-    (e) =>
-      e.id !== event.id &&
-      e.date === event.date &&
-      e.startMinutes + e.durationMinutes === event.startMinutes
-  );
-  const hasNext = allEvents.some(
-    (e) =>
-      e.id !== event.id &&
-      e.date === event.date &&
-      e.startMinutes === end
-  );
-  return { hasPrev, hasNext };
-}
 
 // ---- 型 ----
 type DragState = {
@@ -155,6 +137,7 @@ function CreatingEventBlock({
   onCancel,
   onOpenDetail,
   onResize,
+  onMove,
 }: {
   startMinutes: number;
   durationMinutes: number;
@@ -162,6 +145,7 @@ function CreatingEventBlock({
   onCancel: () => void;
   onOpenDetail: (title: string) => void;
   onResize: (durationMinutes: number) => void;
+  onMove: (startMinutes: number) => void;
 }) {
   const [title, setTitle] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -197,11 +181,33 @@ function CreatingEventBlock({
     }
   }
 
+  function handleBlockMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    if ((e.target as HTMLElement).closest("input")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startY = e.clientY;
+    const origStart = startMinutes;
+
+    const onMouseMove = (me: MouseEvent) => {
+      const dy = me.clientY - startY;
+      const deltaSlots = Math.round(dy / SLOT_HEIGHT);
+      const newStart = Math.max(0, Math.min(origStart + deltaSlots * 15, TOTAL_HOURS * 60 - durationMinutes));
+      onMove(newStart);
+    };
+    const onMouseUp = () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }
+
   return (
     <div
-      className="event-block absolute z-20 flex flex-col gap-0.5 overflow-hidden rounded-lg bg-blue-500 px-2 py-1.5 shadow-xl ring-2 ring-blue-300/80"
+      className="event-block absolute z-20 flex flex-col gap-0.5 overflow-hidden rounded bg-blue-500 px-2 py-1.5 shadow-xl ring-2 ring-blue-300/80 cursor-grab active:cursor-grabbing"
       style={{ top, height, left: "3px", right: "3px" }}
       onClick={(e) => e.stopPropagation()}
+      onMouseDown={handleBlockMouseDown}
     >
       <input
         ref={inputRef}
@@ -218,9 +224,9 @@ function CreatingEventBlock({
       </p>
       <p className="text-[10px] leading-tight text-blue-200/50">Tab: 詳細設定</p>
 
-      {/* リサイズハンドル */}
+      {/* リサイズハンドル（非表示・機能のみ） */}
       <div
-        className="resize-handle absolute bottom-0 left-0 right-0 flex h-3 cursor-s-resize items-center justify-center hover:opacity-100"
+        className="resize-handle absolute bottom-0 left-0 right-0 h-2 cursor-s-resize"
         onMouseDown={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -242,9 +248,7 @@ function CreatingEventBlock({
           document.addEventListener("mousemove", onMouseMove);
           document.addEventListener("mouseup", onMouseUp);
         }}
-      >
-        <div className="h-0.5 w-8 rounded-full bg-white/70" />
-      </div>
+      />
     </div>
   );
 }
@@ -255,7 +259,6 @@ function EventBlock({
   isDragging,
   column,
   totalColumns,
-  allDayEvents,
   onStartMove,
   onStartResize,
 }: {
@@ -263,7 +266,6 @@ function EventBlock({
   isDragging: boolean;
   column: number;
   totalColumns: number;
-  allDayEvents: ScheduleEvent[];
   onStartMove: (event: ScheduleEvent, clientX: number, clientY: number) => void;
   onStartResize: (event: ScheduleEvent, clientX: number, clientY: number) => void;
 }) {
@@ -274,32 +276,15 @@ function EventBlock({
   const linkedTask = event.taskId ? tasks.find((t) => t.id === event.taskId) : undefined;
   const isTask = linkedTask !== undefined;
 
-  const { hasPrev, hasNext } = getAdjacentFlags(event, allDayEvents);
-
   // 重なりレイアウト: 列幅の計算（少し間隔を入れる）
   const GAP = 2;
   const widthPct = `calc(${100 / totalColumns}% - ${GAP}px)`;
   const leftPct = `calc(${(column / totalColumns) * 100}% + ${column > 0 ? GAP / 2 : 1}px)`;
 
-  // 連続予定の角丸制御
-  const roundedTop = !hasPrev;
-  const roundedBottom = !hasNext;
-  const borderRadiusClass = cn(
-    roundedTop && roundedBottom && "rounded-lg",
-    roundedTop && !roundedBottom && "rounded-t-lg rounded-b-none",
-    !roundedTop && roundedBottom && "rounded-b-lg rounded-t-none",
-    !roundedTop && !roundedBottom && "rounded-none"
-  );
-
-  // 連続予定の間は薄い区切り線を入れる（ほぼ繋がって見える）
-  const borderTopClass = hasPrev ? "border-t border-white/20" : "";
-
   return (
     <div
       className={cn(
-        "event-block absolute z-10 select-none overflow-hidden px-1.5 py-0.5 text-white",
-        borderRadiusClass,
-        borderTopClass,
+        "event-block absolute z-10 select-none overflow-hidden rounded px-1.5 py-0.5 text-white ring-1 ring-white/40",
         isTask
           ? isDragging
             ? "z-30 cursor-grabbing bg-slate-500 opacity-90 shadow-2xl ring-2 ring-slate-300"
@@ -309,8 +294,8 @@ function EventBlock({
             : "cursor-grab bg-blue-500 transition-colors hover:bg-blue-600"
       )}
       style={{
-        top: hasPrev ? top - 1 : top,
-        height: hasPrev ? height + 1 : height,
+        top,
+        height,
         left: leftPct,
         width: widthPct,
       }}
@@ -355,18 +340,16 @@ function EventBlock({
         </p>
       )}
 
-      {/* リサイズハンドル */}
+      {/* リサイズハンドル（非表示・機能のみ） */}
       {!isDragging && (
         <div
-          className="absolute bottom-0 left-0 right-0 flex h-3 cursor-s-resize items-center justify-center opacity-0 hover:opacity-100"
+          className="absolute bottom-0 left-0 right-0 h-2 cursor-s-resize"
           onMouseDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
             onStartResize(event, e.clientX, e.clientY);
           }}
-        >
-          <div className="h-0.5 w-6 rounded-full bg-white/60" />
-        </div>
+        />
       )}
     </div>
   );
@@ -487,6 +470,7 @@ function DayColumn({
   onInlineCancel,
   onInlineOpenDetail,
   onInlineResize,
+  onInlineMove,
   onDropTask,
 }: {
   day: Date;
@@ -501,6 +485,7 @@ function DayColumn({
   onInlineCancel: () => void;
   onInlineOpenDetail: (title: string) => void;
   onInlineResize: (durationMinutes: number) => void;
+  onInlineMove: (startMinutes: number) => void;
   onDropTask: (taskId: string, title: string, date: string, startMinutes: number) => void;
 }) {
   const today = isToday(day);
@@ -587,7 +572,7 @@ function DayColumn({
           isDragging={event.id === draggingEventId}
           column={column}
           totalColumns={totalColumns}
-          allDayEvents={events}
+
           onStartMove={onStartMove}
           onStartResize={onStartResize}
         />
@@ -602,6 +587,7 @@ function DayColumn({
           onCancel={onInlineCancel}
           onOpenDetail={onInlineOpenDetail}
           onResize={onInlineResize}
+          onMove={onInlineMove}
         />
       )}
 
@@ -970,6 +956,10 @@ export function WeekView() {
     setCreatingSlot((prev) => prev ? { ...prev, durationMinutes } : null);
   }
 
+  function handleInlineMove(startMinutes: number) {
+    setCreatingSlot((prev) => prev ? { ...prev, startMinutes } : null);
+  }
+
   function handleQuickUpdate(title: string) {
     if (!quickView) return;
     updateEvent(quickView.event.id, { title });
@@ -1136,6 +1126,7 @@ export function WeekView() {
                   onInlineCancel={() => setCreatingSlot(null)}
                   onInlineOpenDetail={handleInlineOpenDetail}
                   onInlineResize={handleInlineResize}
+                  onInlineMove={handleInlineMove}
                   onDropTask={handleDropTask}
                 />
               );
