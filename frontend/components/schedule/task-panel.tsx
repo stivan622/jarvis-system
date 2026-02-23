@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useEffect } from "react";
-import { CheckCircle2, Circle, GripVertical, ListTodo } from "lucide-react";
+import { CalendarCheck2, CheckCircle2, Circle, GripVertical, ListTodo } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTaskStore } from "@/lib/store/task-store";
 import { useProjectStore } from "@/lib/store/project-store";
+import { useScheduleStore } from "@/lib/store/schedule-store";
 import { Task } from "@/lib/types";
 
 function TaskPanelSkeleton() {
@@ -33,7 +34,9 @@ function TaskPanelSkeleton() {
 
 export const TASK_DRAG_MIME = "application/jarvis-task";
 
-function TaskDragItem({ task }: { task: Task }) {
+function TaskDragItem({ task, isScheduled }: { task: Task; isScheduled: boolean }) {
+  const { updateTask } = useTaskStore();
+
   function handleDragStart(e: React.DragEvent) {
     e.dataTransfer.setData(
       TASK_DRAG_MIME,
@@ -47,25 +50,37 @@ function TaskDragItem({ task }: { task: Task }) {
       draggable
       onDragStart={handleDragStart}
       className={cn(
-        "group flex items-start gap-1.5 rounded-md px-2 py-1.5",
+        "group flex items-center gap-1.5 rounded-md px-2 py-1.5",
         "cursor-grab select-none transition-colors hover:bg-accent active:cursor-grabbing",
         task.done && "opacity-50"
       )}
     >
-      <GripVertical className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/30 transition-colors group-hover:text-muted-foreground/60" />
-      {task.done ? (
-        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-500" />
-      ) : (
-        <Circle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/50" />
-      )}
+      <GripVertical className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/30 transition-colors group-hover:text-muted-foreground/60" />
+      <button
+        className="flex-shrink-0 cursor-pointer"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          updateTask(task.id, { done: !task.done });
+        }}
+      >
+        {task.done ? (
+          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+        ) : (
+          <Circle className="h-3.5 w-3.5 text-muted-foreground/50 transition-colors hover:text-muted-foreground" />
+        )}
+      </button>
       <span
         className={cn(
-          "min-w-0 text-sm leading-tight",
+          "min-w-0 flex-1 truncate text-xs leading-tight",
           task.done && "text-muted-foreground line-through"
         )}
       >
         {task.title}
       </span>
+      {isScheduled && (
+        <CalendarCheck2 className="h-3 w-3 flex-shrink-0 text-blue-400" />
+      )}
     </div>
   );
 }
@@ -73,12 +88,18 @@ function TaskDragItem({ task }: { task: Task }) {
 export function TaskPanel() {
   const { tasks, loading: tkLoading, init: tkInit } = useTaskStore();
   const { projects, loading: pjLoading, init: pjInit } = useProjectStore();
+  const { events } = useScheduleStore();
 
   useEffect(() => {
     tkInit();
     pjInit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const scheduledTaskIds = useMemo(
+    () => new Set(events.map((e) => e.taskId).filter(Boolean) as string[]),
+    [events]
+  );
 
   const thisWeekTasks = useMemo(() => tasks.filter((t) => t.thisWeek), [tasks]);
   const doneCount = useMemo(
@@ -163,7 +184,11 @@ export function TaskPanel() {
                   {projectMap.get(projectId) ?? "—"}
                 </p>
                 {projectTasks.map((task) => (
-                  <TaskDragItem key={task.id} task={task} />
+                  <TaskDragItem
+                    key={task.id}
+                    task={task}
+                    isScheduled={scheduledTaskIds.has(task.id)}
+                  />
                 ))}
               </div>
             ))}
