@@ -3,9 +3,9 @@ module Api
     class ProjectsController < BaseController
       def index
         projects = if params[:workspace_id]
-          Project.where(workspace_id: params[:workspace_id]).order(:created_at)
+          Project.where(workspace_id: params[:workspace_id]).order(:position, :created_at)
         else
-          Project.order(:created_at)
+          Project.order(:position, :created_at)
         end
         render json: projects
       end
@@ -37,7 +37,7 @@ module Api
       end
 
       def project_params
-        params.require(:project).permit(:workspace_id, :name)
+        params.require(:project).permit(:workspace_id, :name, :position)
       end
     end
   end

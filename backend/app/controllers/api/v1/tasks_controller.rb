@@ -5,7 +5,9 @@ module Api
         tasks = Task.all
         tasks = tasks.where(project_id: params[:project_id]) if params[:project_id]
         tasks = tasks.where(this_week: true) if params[:this_week] == "true"
-        render json: tasks.order(:created_at)
+        tasks = tasks.where(parent_task_id: params[:parent_task_id]) if params[:parent_task_id]
+        tasks = tasks.where(parent_task_id: nil) if params[:root_only] == "true"
+        render json: tasks.order(:position, :created_at)
       end
 
       def show
@@ -35,7 +37,7 @@ module Api
       end
 
       def task_params
-        params.require(:task).permit(:project_id, :title, :done, :this_week)
+        params.require(:task).permit(:project_id, :title, :done, :this_week, :parent_task_id, :position)
       end
     end
   end
