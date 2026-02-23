@@ -1,0 +1,31 @@
+# ===== Ruby / Rails =====
+backend/.bundle/
+backend/log/
+backend/tmp/
+backend/storage/
+backend/public/assets
+backend/public/packs
+backend/node_modules/
+backend/.byebug_history
+
+# ===== Node.js / Next.js =====
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+
+# ===== 環境変数・シークレット =====
+.env
+.env.local
+.env.*.local
+backend/.env
+backend/.env.local
+
+# ===== OS / エディタ =====
+.DS_Store
+.idea/
+.vscode/settings.json
+*.swp
+
+# ===== ログ =====
+*.log
