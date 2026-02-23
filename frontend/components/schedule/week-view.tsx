@@ -18,7 +18,7 @@ const HOUR_HEIGHT = SLOT_HEIGHT * 4;
 const TOTAL_HOURS = 24;
 const GUTTER_W = 56;
 const DEFAULT_DURATION = 30;
-const DRAG_THRESHOLD = 5; // ドラッグ判定の最低移動距離 (px)
+const DRAG_THRESHOLD = 5;
 const DAYS_JA = ["月", "火", "水", "木", "金", "土", "日"];
 
 // ---- ユーティリティ ----
@@ -48,6 +48,76 @@ function isToday(date: Date) {
   );
 }
 
+// ---- 重なりレイアウト計算 ----
+type LayoutEvent = {
+  event: ScheduleEvent;
+  column: number;
+  totalColumns: number;
+};
+
+function computeLayout(events: ScheduleEvent[]): LayoutEvent[] {
+  if (events.length === 0) return [];
+
+  // 開始時刻順にソート
+  const sorted = [...events].sort((a, b) => a.startMinutes - b.startMinutes);
+
+  // 列割り当て: グリーディーにアクティブな列を管理
+  const columns: number[] = []; // columns[i] = そのカラムの現在の終了分
+  const assignments: { event: ScheduleEvent; column: number }[] = [];
+
+  for (const event of sorted) {
+    const end = event.startMinutes + event.durationMinutes;
+    // 空いている列を探す
+    let placed = false;
+    for (let col = 0; col < columns.length; col++) {
+      if (columns[col] <= event.startMinutes) {
+        columns[col] = end;
+        assignments.push({ event, column: col });
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      columns.push(end);
+      assignments.push({ event, column: columns.length - 1 });
+    }
+  }
+
+  // 各イベントの totalColumns を計算
+  // overlapping group: 全てのイベントに対して、同じ時間帯に重なる最大列数を求める
+  const result: LayoutEvent[] = assignments.map(({ event, column }) => {
+    const end = event.startMinutes + event.durationMinutes;
+    // このイベントと重なる全イベントを収集
+    const overlapping = assignments.filter(({ event: other }) => {
+      const otherEnd = other.startMinutes + other.durationMinutes;
+      return other.startMinutes < end && otherEnd > event.startMinutes;
+    });
+    const maxCol = Math.max(...overlapping.map((o) => o.column));
+    return { event, column, totalColumns: maxCol + 1 };
+  });
+
+  return result;
+}
+
+// ---- 連続予定判定 ----
+// あるイベントの直前/直後に別のイベントがぴったり接しているか
+function getAdjacentFlags(event: ScheduleEvent, allEvents: ScheduleEvent[]) {
+  const end = event.startMinutes + event.durationMinutes;
+  const hasPrev = allEvents.some(
+    (e) =>
+      e.id !== event.id &&
+      e.date === event.date &&
+      e.startMinutes + e.durationMinutes === event.startMinutes
+  );
+  const hasNext = allEvents.some(
+    (e) =>
+      e.id !== event.id &&
+      e.date === event.date &&
+      e.startMinutes === end
+  );
+  return { hasPrev, hasNext };
+}
+
 // ---- 型 ----
 type DragState = {
   type: "move" | "resize";
@@ -56,13 +126,18 @@ type DragState = {
   currentDate: string;
   currentStartMinutes: number;
   currentDurationMinutes: number;
-  grabOffsetMinutes: number; // moveのみ: イベント内でつかんだ位置
+  grabOffsetMinutes: number;
   activated: boolean;
   startClientX: number;
   startClientY: number;
 };
 
-type CreatingSlot = { date: string; startMinutes: number } | null;
+type CreatingSlot = {
+  date: string;
+  startMinutes: number;
+  durationMinutes: number;
+} | null;
+
 type QuickView = { event: ScheduleEvent; x: number; y: number } | null;
 type DetailDialog = {
   open: boolean;
@@ -75,14 +150,18 @@ type DetailDialog = {
 // ---- CreatingEventBlock ----
 function CreatingEventBlock({
   startMinutes,
+  durationMinutes,
   onSave,
   onCancel,
   onOpenDetail,
+  onResize,
 }: {
   startMinutes: number;
+  durationMinutes: number;
   onSave: (title: string) => void;
   onCancel: () => void;
   onOpenDetail: (title: string) => void;
+  onResize: (durationMinutes: number) => void;
 }) {
   const [title, setTitle] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -92,9 +171,8 @@ function CreatingEventBlock({
     inputRef.current?.focus();
   }, []);
 
-  const cappedDuration = Math.min(DEFAULT_DURATION, TOTAL_HOURS * 60 - startMinutes);
   const top = (startMinutes / 15) * SLOT_HEIGHT;
-  const height = Math.max((cappedDuration / 15) * SLOT_HEIGHT, HOUR_HEIGHT / 2);
+  const height = Math.max((durationMinutes / 15) * SLOT_HEIGHT, HOUR_HEIGHT / 2);
 
   function commit(fn: () => void) {
     committedRef.current = true;
@@ -121,8 +199,8 @@ function CreatingEventBlock({
 
   return (
     <div
-      className="event-block absolute left-0.5 right-0.5 z-20 flex flex-col gap-0.5 overflow-hidden rounded-md bg-blue-500 px-2 py-1.5 shadow-lg ring-2 ring-blue-300/70"
-      style={{ top, height }}
+      className="event-block absolute z-20 flex flex-col gap-0.5 overflow-hidden rounded-lg bg-blue-500 px-2 py-1.5 shadow-xl ring-2 ring-blue-300/80"
+      style={{ top, height, left: "3px", right: "3px" }}
       onClick={(e) => e.stopPropagation()}
     >
       <input
@@ -136,9 +214,37 @@ function CreatingEventBlock({
         className="w-full bg-transparent text-xs font-medium text-white placeholder-blue-200/60 focus:outline-none"
       />
       <p className="text-[10px] leading-tight text-blue-100">
-        {formatTime(startMinutes)}–{formatTime(startMinutes + cappedDuration)}
+        {formatTime(startMinutes)}–{formatTime(startMinutes + durationMinutes)}
       </p>
       <p className="text-[10px] leading-tight text-blue-200/50">Tab: 詳細設定</p>
+
+      {/* リサイズハンドル */}
+      <div
+        className="resize-handle absolute bottom-0 left-0 right-0 flex h-3 cursor-s-resize items-center justify-center hover:opacity-100"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const startY = e.clientY;
+          const origDuration = durationMinutes;
+          const origStart = startMinutes;
+
+          const onMouseMove = (me: MouseEvent) => {
+            const dy = me.clientY - startY;
+            const deltaSlots = Math.round(dy / SLOT_HEIGHT);
+            const newDuration = Math.max(15, origDuration + deltaSlots * 15);
+            const capped = Math.min(newDuration, TOTAL_HOURS * 60 - origStart);
+            onResize(capped);
+          };
+          const onMouseUp = () => {
+            document.removeEventListener("mousemove", onMouseMove);
+            document.removeEventListener("mouseup", onMouseUp);
+          };
+          document.addEventListener("mousemove", onMouseMove);
+          document.addEventListener("mouseup", onMouseUp);
+        }}
+      >
+        <div className="h-0.5 w-8 rounded-full bg-white/70" />
+      </div>
     </div>
   );
 }
@@ -147,11 +253,17 @@ function CreatingEventBlock({
 function EventBlock({
   event,
   isDragging,
+  column,
+  totalColumns,
+  allDayEvents,
   onStartMove,
   onStartResize,
 }: {
   event: ScheduleEvent;
   isDragging: boolean;
+  column: number;
+  totalColumns: number;
+  allDayEvents: ScheduleEvent[];
   onStartMove: (event: ScheduleEvent, clientX: number, clientY: number) => void;
   onStartResize: (event: ScheduleEvent, clientX: number, clientY: number) => void;
 }) {
@@ -162,19 +274,46 @@ function EventBlock({
   const linkedTask = event.taskId ? tasks.find((t) => t.id === event.taskId) : undefined;
   const isTask = linkedTask !== undefined;
 
+  const { hasPrev, hasNext } = getAdjacentFlags(event, allDayEvents);
+
+  // 重なりレイアウト: 列幅の計算（少し間隔を入れる）
+  const GAP = 2;
+  const widthPct = `calc(${100 / totalColumns}% - ${GAP}px)`;
+  const leftPct = `calc(${(column / totalColumns) * 100}% + ${column > 0 ? GAP / 2 : 1}px)`;
+
+  // 連続予定の角丸制御
+  const roundedTop = !hasPrev;
+  const roundedBottom = !hasNext;
+  const borderRadiusClass = cn(
+    roundedTop && roundedBottom && "rounded-lg",
+    roundedTop && !roundedBottom && "rounded-t-lg rounded-b-none",
+    !roundedTop && roundedBottom && "rounded-b-lg rounded-t-none",
+    !roundedTop && !roundedBottom && "rounded-none"
+  );
+
+  // 連続予定の間は薄い区切り線を入れる（ほぼ繋がって見える）
+  const borderTopClass = hasPrev ? "border-t border-white/20" : "";
+
   return (
     <div
       className={cn(
-        "event-block absolute left-0.5 right-0.5 z-10 select-none overflow-hidden rounded px-1.5 py-0.5 text-white",
+        "event-block absolute z-10 select-none overflow-hidden px-1.5 py-0.5 text-white",
+        borderRadiusClass,
+        borderTopClass,
         isTask
           ? isDragging
-            ? "z-30 cursor-grabbing bg-slate-500/90 opacity-90 shadow-xl ring-2 ring-slate-300"
-            : "cursor-grab bg-slate-500/90 transition-colors hover:bg-slate-600"
+            ? "z-30 cursor-grabbing bg-slate-500 opacity-90 shadow-2xl ring-2 ring-slate-300"
+            : "cursor-grab bg-slate-500 transition-colors hover:bg-slate-600"
           : isDragging
-            ? "z-30 cursor-grabbing bg-blue-500/90 opacity-90 shadow-xl ring-2 ring-blue-300"
-            : "cursor-grab bg-blue-500/90 transition-colors hover:bg-blue-600"
+            ? "z-30 cursor-grabbing bg-blue-500 opacity-90 shadow-2xl ring-2 ring-blue-300"
+            : "cursor-grab bg-blue-500 transition-colors hover:bg-blue-600"
       )}
-      style={{ top, height }}
+      style={{
+        top: hasPrev ? top - 1 : top,
+        height: hasPrev ? height + 1 : height,
+        left: leftPct,
+        width: widthPct,
+      }}
       onMouseDown={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -182,7 +321,6 @@ function EventBlock({
       }}
     >
       <div className="flex items-start gap-1">
-        {/* タスクのチェックボックス */}
         {isTask && (
           <div
             className="mt-0.5 flex-shrink-0"
@@ -220,7 +358,7 @@ function EventBlock({
       {/* リサイズハンドル */}
       {!isDragging && (
         <div
-          className="absolute bottom-0 left-0 right-0 flex h-2 cursor-s-resize items-center justify-center opacity-0 hover:opacity-100 group-hover:opacity-100"
+          className="absolute bottom-0 left-0 right-0 flex h-3 cursor-s-resize items-center justify-center opacity-0 hover:opacity-100"
           onMouseDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -340,7 +478,7 @@ function DayColumn({
   day,
   events,
   currentMinutes,
-  creatingStartMinutes,
+  creatingSlot,
   draggingEventId,
   onSlotClick,
   onStartMove,
@@ -348,12 +486,13 @@ function DayColumn({
   onInlineSave,
   onInlineCancel,
   onInlineOpenDetail,
+  onInlineResize,
   onDropTask,
 }: {
   day: Date;
   events: ScheduleEvent[];
   currentMinutes: number;
-  creatingStartMinutes: number | null;
+  creatingSlot: CreatingSlot;
   draggingEventId: string | null;
   onSlotClick: (date: string, startMinutes: number) => void;
   onStartMove: (event: ScheduleEvent, clientX: number, clientY: number) => void;
@@ -361,11 +500,14 @@ function DayColumn({
   onInlineSave: (title: string) => void;
   onInlineCancel: () => void;
   onInlineOpenDetail: (title: string) => void;
+  onInlineResize: (durationMinutes: number) => void;
   onDropTask: (taskId: string, title: string, date: string, startMinutes: number) => void;
 }) {
   const today = isToday(day);
   const [dragOver, setDragOver] = useState(false);
   const [dragOverMinutes, setDragOverMinutes] = useState<number | null>(null);
+  const dateStr = toDateStr(day);
+  const isCreatingHere = creatingSlot?.date === dateStr;
 
   function calcMinutesFromClientY(e: React.DragEvent<HTMLDivElement>): number {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -397,7 +539,7 @@ function DayColumn({
     if (!raw) return;
     const { taskId, title } = JSON.parse(raw) as { taskId: string; title: string };
     const startMins = calcMinutesFromClientY(e);
-    onDropTask(taskId, title, toDateStr(day), startMins);
+    onDropTask(taskId, title, dateStr, startMins);
   }
 
   function handleClick(e: React.MouseEvent<HTMLDivElement>) {
@@ -406,8 +548,11 @@ function DayColumn({
     const y = e.clientY - rect.top;
     const slotIndex = Math.floor(y / SLOT_HEIGHT);
     const startMins = Math.min(slotIndex * 15, (TOTAL_HOURS * 4 - 1) * 15);
-    onSlotClick(toDateStr(day), startMins);
+    onSlotClick(dateStr, startMins);
   }
+
+  // 重なりレイアウト計算
+  const layout = useMemo(() => computeLayout(events), [events]);
 
   return (
     <div
@@ -434,31 +579,36 @@ function DayColumn({
         />
       ))}
 
-      {/* イベント */}
-      {events.map((ev) => (
+      {/* イベント（重なりレイアウト付き） */}
+      {layout.map(({ event, column, totalColumns }) => (
         <EventBlock
-          key={ev.id}
-          event={ev}
-          isDragging={ev.id === draggingEventId}
+          key={event.id}
+          event={event}
+          isDragging={event.id === draggingEventId}
+          column={column}
+          totalColumns={totalColumns}
+          allDayEvents={events}
           onStartMove={onStartMove}
           onStartResize={onStartResize}
         />
       ))}
 
       {/* インライン作成ブロック */}
-      {creatingStartMinutes !== null && (
+      {isCreatingHere && creatingSlot && (
         <CreatingEventBlock
-          startMinutes={creatingStartMinutes}
+          startMinutes={creatingSlot.startMinutes}
+          durationMinutes={creatingSlot.durationMinutes}
           onSave={onInlineSave}
           onCancel={onInlineCancel}
           onOpenDetail={onInlineOpenDetail}
+          onResize={onInlineResize}
         />
       )}
 
       {/* タスクドラッグ中のプレビューブロック */}
       {dragOver && dragOverMinutes !== null && (
         <div
-          className="pointer-events-none absolute left-0.5 right-0.5 z-30 rounded border-2 border-dashed border-slate-500/60 bg-slate-500/10"
+          className="pointer-events-none absolute left-0.5 right-0.5 z-30 rounded-lg border-2 border-dashed border-slate-500/60 bg-slate-500/10"
           style={{
             top: (dragOverMinutes / 15) * SLOT_HEIGHT,
             height: (DEFAULT_DURATION / 15) * SLOT_HEIGHT,
@@ -487,7 +637,6 @@ function DayColumn({
 function WeekViewSkeleton() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* ナビゲーションバー */}
       <div className="flex flex-shrink-0 items-center justify-between border-b px-4 py-2">
         <div className="flex items-center gap-1.5">
           <Skeleton className="h-8 w-8 rounded-md" />
@@ -497,7 +646,6 @@ function WeekViewSkeleton() {
         <Skeleton className="h-4 w-44" />
         <div className="w-28" />
       </div>
-      {/* 曜日ヘッダー */}
       <div className="flex flex-shrink-0 border-b">
         <div style={{ width: GUTTER_W }} className="flex-shrink-0 border-r border-border/40" />
         {[...Array(7)].map((_, i) => (
@@ -510,7 +658,6 @@ function WeekViewSkeleton() {
           </div>
         ))}
       </div>
-      {/* グリッド */}
       <div className="flex-1 overflow-hidden">
         <div className="flex h-full">
           <div style={{ width: GUTTER_W }} className="flex-shrink-0 border-r border-border/40" />
@@ -538,7 +685,6 @@ export function WeekView() {
   const daysRef = useRef(days);
   useEffect(() => { daysRef.current = days; });
 
-  // 週の切り替え時にイベントを再取得
   useEffect(() => {
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 6);
@@ -560,7 +706,6 @@ export function WeekView() {
   });
   const [dragging, setDragging] = useState<DragState | null>(null);
 
-  // ドラッグ終了後に実行するアクション（状態更新後に副作用を実行するため）
   const dragResultRef = useRef<{
     save?: ScheduleEvent;
     click?: { event: ScheduleEvent; x: number; y: number };
@@ -589,7 +734,6 @@ export function WeekView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ドラッグ中はカーソルをgrabbing + テキスト選択を無効化
   useEffect(() => {
     if (!dragging?.activated) return;
     document.body.style.userSelect = "none";
@@ -600,7 +744,6 @@ export function WeekView() {
     };
   }, [dragging?.activated]);
 
-  // ドラッグ終了後の副作用処理
   useEffect(() => {
     if (dragging !== null || !dragResultRef.current) return;
     const result = dragResultRef.current;
@@ -662,7 +805,6 @@ export function WeekView() {
     []
   );
 
-  // ---- document level mouse handlers ----
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!gridRef.current) return;
 
@@ -702,7 +844,6 @@ export function WeekView() {
         }
         return { ...prev, activated, currentDate: newDate, currentStartMinutes: newStart };
       } else {
-        // resize
         const endY = e.clientY - rect.top + scrollTop;
         const newEndSlot = Math.round(endY / SLOT_HEIGHT);
         const newDuration = Math.max(15, newEndSlot * 15 - prev.currentStartMinutes);
@@ -724,7 +865,6 @@ export function WeekView() {
       if (!prev) return null;
 
       if (prev.activated) {
-        // 移動/リサイズを確定
         dragResultRef.current = {
           save: {
             ...prev.original,
@@ -735,7 +875,6 @@ export function WeekView() {
           },
         };
       } else {
-        // 移動なし → クリックとして扱いクイックビューを開く
         dragResultRef.current = {
           click: {
             event: prev.original,
@@ -759,7 +898,6 @@ export function WeekView() {
     };
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
-  // ---- 表示用イベント（ドラッグ中は仮位置で表示） ----
   const displayEvents = useMemo(() => {
     if (!dragging?.activated) return events;
     return events.map((e) =>
@@ -796,12 +934,12 @@ export function WeekView() {
   // ---- ハンドラー ----
   function handleSlotClick(date: string, startMinutes: number) {
     setQuickView(null);
-    setCreatingSlot({ date, startMinutes });
+    setCreatingSlot({ date, startMinutes, durationMinutes: DEFAULT_DURATION });
   }
 
   async function handleInlineSave(title: string) {
     if (!creatingSlot) return;
-    const durationMinutes = Math.min(DEFAULT_DURATION, TOTAL_HOURS * 60 - creatingSlot.startMinutes);
+    const durationMinutes = Math.min(creatingSlot.durationMinutes, TOTAL_HOURS * 60 - creatingSlot.startMinutes);
     setCreatingSlot(null);
     try {
       await createEvent({
@@ -826,6 +964,10 @@ export function WeekView() {
       editingEvent: null,
     });
     setCreatingSlot(null);
+  }
+
+  function handleInlineResize(durationMinutes: number) {
+    setCreatingSlot((prev) => prev ? { ...prev, durationMinutes } : null);
   }
 
   function handleQuickUpdate(title: string) {
@@ -902,7 +1044,6 @@ export function WeekView() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* ドラッグ中: grabbing カーソルのオーバーレイ（テキスト選択防止） */}
       {dragging?.activated && (
         <div className="fixed inset-0 z-[9998] cursor-grabbing" style={{ userSelect: "none" }} />
       )}
@@ -978,8 +1119,7 @@ export function WeekView() {
             {days.map((day, i) => {
               const dateStr = toDateStr(day);
               const dayEvents = displayEvents.filter((e) => e.date === dateStr);
-              const creating =
-                creatingSlot?.date === dateStr ? creatingSlot.startMinutes : null;
+              const isCreatingHere = creatingSlot?.date === dateStr;
 
               return (
                 <DayColumn
@@ -987,7 +1127,7 @@ export function WeekView() {
                   day={day}
                   events={dayEvents}
                   currentMinutes={currentMinutes}
-                  creatingStartMinutes={creating}
+                  creatingSlot={isCreatingHere ? creatingSlot : null}
                   draggingEventId={dragging?.activated ? dragging.eventId : null}
                   onSlotClick={handleSlotClick}
                   onStartMove={startMoveDrag}
@@ -995,6 +1135,7 @@ export function WeekView() {
                   onInlineSave={handleInlineSave}
                   onInlineCancel={() => setCreatingSlot(null)}
                   onInlineOpenDetail={handleInlineOpenDetail}
+                  onInlineResize={handleInlineResize}
                   onDropTask={handleDropTask}
                 />
               );
