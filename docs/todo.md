@@ -25,15 +25,13 @@
 - [x] グローバルレイアウト（サイドバー + ヘッダー）を shadcn/ui で作成
 
 ### 0.3 Workspace / Project / Task 作成 UI（フロントのみ・モックデータ）
-- [ ] `zustand` でクライアントステート管理セットアップ
-- [ ] Workspace 一覧・作成・編集 UI（`Table` + `Dialog` + `Form`）
-- [ ] Project 一覧・作成・編集 UI（Workspace に紐づく、`Card` グリッド）
-- [ ] Task 一覧・作成・編集 UI（Project に紐づく、`Dialog` + `Form`）
+- [x] `zustand` でクライアントステート管理セットアップ（`persist` で localStorage 永続化）
+- [x] Workspace 一覧・作成・編集 UI（左サイドパネル、インライン編集）
+- [x] Project 一覧・作成・編集 UI（Notion ライク、インライン編集、折りたたみ）
+- [x] Task 一覧・作成・編集 UI（チェックボックス + インライン編集 + ホバー削除）
+- [x] Workspace / Project / Task を一画面に統合
 - [ ] カンバンボード（`@dnd-kit/core` + `Card` + `Badge` でステータス管理）
-- [ ] タスクカード（優先度・担当者・期日を `Badge` / `Avatar` で表示）
-- [ ] タスク詳細モーダル（`Dialog` + 全フィールド編集）
 - [ ] ローディング・エラー状態（`Skeleton` / `Sonner` Toast）
-- [ ] モックデータでの E2E 動作確認（Workspace → Project → Task 作成・移動）
 
 ### 0.4 バックエンド初期化（Rails）
 - [ ] Rails 最新版 API アプリ作成（`rails new backend --api --database=postgresql`）

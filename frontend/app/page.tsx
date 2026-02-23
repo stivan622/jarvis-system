@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Layers, FolderOpen, CheckSquare, Bot } from "lucide-react";
+import { Layers, Bot, Users } from "lucide-react";
 import Link from "next/link";
 
 const features = [
@@ -8,21 +8,7 @@ const features = [
     href: "/workspaces",
     icon: Layers,
     title: "Workspace",
-    description: "作業空間を管理・切り替えます",
-    status: "利用可能",
-  },
-  {
-    href: "/projects",
-    icon: FolderOpen,
-    title: "プロジェクト",
-    description: "Workspace 内のプロジェクトを管理します",
-    status: "利用可能",
-  },
-  {
-    href: "/tasks",
-    icon: CheckSquare,
-    title: "タスク",
-    description: "カンバンボードでタスクを管理します",
+    description: "Workspace・プロジェクト・タスクを一画面で管理します",
     status: "利用可能",
   },
   {
@@ -30,6 +16,13 @@ const features = [
     icon: Bot,
     title: "エージェント",
     description: "Claude Code / Codex を並列実行します",
+    status: "近日公開",
+  },
+  {
+    href: "/resources",
+    icon: Users,
+    title: "リソース",
+    description: "メンバーの稼働率・タスク割り当てを管理します",
     status: "近日公開",
   },
 ];
