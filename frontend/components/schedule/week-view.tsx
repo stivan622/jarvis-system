@@ -24,7 +24,10 @@ const DAYS_JA = ["月", "火", "水", "木", "金", "土", "日"];
 
 // ---- ユーティリティ ----
 function toDateStr(date: Date) {
-  return date.toISOString().split("T")[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 function getWeekStart(date: Date): Date {
   const d = new Date(date);
@@ -1235,13 +1238,7 @@ export function WeekView() {
             {days.map((day, i) => {
               const dateStr = toDateStr(day);
               const dayEvents = displayEvents.filter((e) => e.date === dateStr);
-              // GCal イベントの date はイベントのタイムゾーン（JST 等）の日付文字列
-              // WeekView の dateStr は toISOString()（UTC）ベースなので、
-              // GCal 側も同じ変換（ローカル midnight → UTC 日付）を当ててから比較する
-              const dayGcalEvents = gcalEvents.filter((e) => {
-                const utcDate = new Date(e.date + "T00:00:00").toISOString().split("T")[0];
-                return utcDate === dateStr;
-              });
+              const dayGcalEvents = gcalEvents.filter((e) => e.date === dateStr);
               const isCreatingHere = creatingSlot?.date === dateStr;
 
               return (

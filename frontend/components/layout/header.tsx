@@ -7,6 +7,7 @@ const breadcrumbMap: Record<string, string> = {
   "/": "ダッシュボード",
   "/workspaces": "Workspace",
   "/schedule": "スケジュール",
+  "/docs": "ドキュメント",
   "/agents": "エージェント",
   "/resources": "リソース",
   "/settings": "設定",

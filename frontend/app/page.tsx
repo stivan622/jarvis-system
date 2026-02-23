@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Layers, Bot, Users } from "lucide-react";
+import { Layers, Bot, Users, BookOpen } from "lucide-react";
 import Link from "next/link";
 
 const features = [
@@ -9,6 +9,13 @@ const features = [
     icon: Layers,
     title: "Workspace",
     description: "Workspace・プロジェクト・タスクを一画面で管理します",
+    status: "利用可能",
+  },
+  {
+    href: "/docs",
+    icon: BookOpen,
+    title: "ドキュメント",
+    description: "アーキテクチャ・設計・TODO など各種ドキュメントを閲覧できます",
     status: "利用可能",
   },
   {

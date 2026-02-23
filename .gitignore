@@ -14,6 +14,10 @@ frontend/.next/
 frontend/out/
 frontend/.turbo/
 
+# ===== MCP Server =====
+mcp-server/node_modules/
+mcp-server/dist/
+
 # ===== 環境変数・シークレット =====
 .env
 .env.local

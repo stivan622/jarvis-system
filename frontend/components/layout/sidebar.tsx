@@ -10,6 +10,7 @@ import {
   Users,
   Settings,
   Zap,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/", label: "ダッシュボード", icon: LayoutDashboard },
   { href: "/workspaces", label: "Workspace", icon: Layers },
   { href: "/schedule", label: "スケジュール", icon: CalendarDays },
+  { href: "/docs", label: "ドキュメント", icon: BookOpen },
   { href: "/agents", label: "エージェント", icon: Bot, disabled: true },
   { href: "/resources", label: "リソース", icon: Users, disabled: true },
 ];
