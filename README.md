@@ -22,18 +22,78 @@ Slack・メール・会議録画から情報を自動収集し、プロジェク
 | **AI** | Claude 3.5 Sonnet / OpenAI Whisper / OpenAI Codex |
 | **インフラ** | Docker Compose（DB層のみ）+ foreman（アプリ層） |
 
-## ローカル起動
+## セットアップ（初回）
 
 ```bash
-# 1. アプリ層を一括起動（Rails / Next.js ）
+# 1. 依存パッケージのインストール
+cd backend && bundle install && cd ..
+cd frontend && npm install && cd ..
+
+# 2. 環境変数の設定
+cp .env.example backend/.env
+# backend/.env を編集して DB 接続情報・API キーを記入
+
+# 3. フロントエンド環境変数の設定
+echo "NEXT_PUBLIC_API_URL=http://localhost:3001" > frontend/.env.local
+
+# 4. データベースの作成 & マイグレーション
+cd backend
+bundle exec rails db:create
+bundle exec rails db:migrate
+cd ..
+```
+
+## 開発時
+
+```bash
 foreman start -f Procfile.dev
 ```
 
 | サービス | URL |
 |---|---|
-| Dashboard | http://localhost:3000 |
+| Dashboard | http://localhost:4000 |
 | Rails API | http://localhost:3001 |
 | Sidekiq Web UI | http://localhost:3001/sidekiq |
+
+## 使用時（本番モード）
+
+```bash
+# 1. フロントエンド環境変数の設定（初回のみ）
+echo "NEXT_PUBLIC_API_URL=http://localhost:3101" > frontend/.env.production.local
+
+# 2. 本番用 DB のマイグレーション（初回・スキーマ変更時）
+cd backend
+RAILS_ENV=production bundle exec rails db:create db:migrate
+cd ..
+
+# 3. フロントエンドビルド（初回・コード変更時）
+cd frontend && npm run build && cd ..
+
+# 4. 起動
+foreman start
+```
+
+| サービス | URL |
+|---|---|
+| Dashboard | http://localhost:4100 |
+| Rails API | http://localhost:3101 |
+
+## マイグレーション
+
+```bash
+# マイグレーションファイルの作成
+cd backend && bundle exec rails generate migration <MigrationName>
+
+# 開発環境への適用
+bundle exec rails db:migrate
+
+# 本番環境への適用
+RAILS_ENV=production bundle exec rails db:migrate
+
+# ロールバック
+bundle exec rails db:rollback          # 開発環境
+RAILS_ENV=production bundle exec rails db:rollback  # 本番環境
+```
 
 ## ドキュメント
 

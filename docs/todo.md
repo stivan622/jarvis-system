@@ -1,6 +1,6 @@
 # Jarvis System — 開発 TODO リスト
 
-> ステータス凡例: `[ ]` 未着手 / `[~]` 進行中 / `[x]` 完了
+> ステータス凡例: `[ ]` 未着手 / `[~]` 進行中 / `[x]` 完了 / `[-]` 不要・スキップ
 
 ---
 
@@ -26,21 +26,32 @@
 
 ### 0.3 Workspace / Project / Task 作成 UI（フロントのみ・モックデータ）
 - [x] `zustand` でクライアントステート管理セットアップ（`persist` で localStorage 永続化）
-- [x] Workspace 一覧・作成・編集 UI（左サイドパネル、インライン編集）
+- [x] Workspace 一覧・作成・編集・削除 UI（左サイドパネル、インライン編集）
 - [x] Project 一覧・作成・編集 UI（Notion ライク、インライン編集、折りたたみ）
 - [x] Task 一覧・作成・編集 UI（チェックボックス + インライン編集 + ホバー削除）
 - [x] Workspace / Project / Task を一画面に統合
-- [ ] カンバンボード（`@dnd-kit/core` + `Card` + `Badge` でステータス管理）
-- [ ] ローディング・エラー状態（`Skeleton` / `Sonner` Toast）
+- [x] 「今週」フラグ付きタスクのフィルタリング（今週ボタン）
+- [-] カンバンボード（不要）
+- [x] ローディング・エラー状態（`Skeleton` / `Sonner` Toast）
+
+### 0.3a スケジュール UI（フロントのみ・モックデータ）
+- [x] `zustand` でスケジュールステート管理セットアップ（`persist` で localStorage 永続化）
+- [x] 週間カレンダービュー（7日グリッド、時刻スロット）
+- [x] 週ナビゲーション（前後週への移動・今日に戻るボタン）
+- [x] イベント作成・編集・削除（`EventDialog`、クリック/ドラッグで作成）
+- [x] イベントのドラッグ移動・リサイズ（ピクセル精度）
+- [x] タスクパネル（今週フラグ付きタスク一覧、進捗サマリー、プロジェクトグループ表示）
+- [x] タスク → カレンダーへのドラッグ＆ドロップでイベント追加
+- [x] ローディング・エラー状態（`Skeleton` / `Sonner` Toast）
 
 ### 0.4 バックエンド初期化（Rails）
-- [ ] Rails 最新版 API アプリ作成（`rails new backend --api --database=postgresql`）
-- [ ] `Gemfile` に最小構成の gem を追加（下記参照）
-- [ ] `database.yml` のローカル DB 接続設定
-- [ ] `rails db:create` でデータベース作成確認
-- [ ] `dotenv-rails` で `.env` 読み込み設定
-- [ ] CORS 設定（`rack-cors` gem、フロントエンドのポートを許可）
-- [ ] ヘルスチェックエンドポイント（`GET /up`）確認
+- [x] Rails 最新版 API アプリ作成（`rails new backend --api --database=postgresql`）
+- [x] `Gemfile` に最小構成の gem を追加（下記参照）
+- [x] `database.yml` のローカル DB 接続設定
+- [x] `rails db:create` でデータベース作成確認
+- [x] `dotenv-rails` で `.env` 読み込み設定
+- [x] CORS 設定（`rack-cors` gem、フロントエンドのポートを許可）
+- [x] ヘルスチェックエンドポイント（`GET /up`）確認
 
 **Phase 0.4 の gem（最小構成）:**
 ```ruby
@@ -50,15 +61,52 @@ gem 'rack-cors'
 ```
 
 ### 0.5 バックエンド開発 + フロントエンド繋ぎこみ
-- [ ] `Workspace` マイグレーション・モデル・CRUD API（`Api::V1::WorkspacesController`）
-- [ ] `Project` マイグレーション・モデル・CRUD API（`Api::V1::ProjectsController`）
-- [ ] `Task` マイグレーション・モデル（status enum）・CRUD API（`Api::V1::TasksController`）
-- [ ] `Resource` / `TaskAssignment` マイグレーション・モデル作成
-- [ ] シードデータ作成（`db/seeds.rb`）で動作確認用サンプルを投入
-- [ ] API クライアント（`lib/api.ts`）の実装（fetch wrapper + 型定義）
-- [ ] フロントエンドをモックデータから API 接続に切り替え
-- [ ] ドラッグ＆ドロップによるタスクステータス変更（`PATCH /api/v1/tasks/:id`）
-- [ ] E2E での動作確認（Workspace 作成 → Project 作成 → Task 作成・移動）
+
+#### 0.5a モデル・マイグレーション・API 実装
+
+**Workspace**
+- [ ] `workspaces` テーブル作成（`name:string`）
+- [ ] `Workspace` モデル（バリデーション: name 必須）
+- [ ] `Api::V1::WorkspacesController` CRUD（`GET /`, `POST /`, `PATCH /:id`, `DELETE /:id`）
+
+**Project**
+- [ ] `projects` テーブル作成（`workspace_id:references`, `name:string`）
+- [ ] `Project` モデル（`belongs_to :workspace`、`dependent: :destroy` で Task 連鎖削除）
+- [ ] `Api::V1::ProjectsController` CRUD（`GET /?workspace_id=`, `POST /`, `PATCH /:id`, `DELETE /:id`）
+
+**Task**
+- [ ] `tasks` テーブル作成（`project_id:references`, `title:string`, `done:boolean`, `this_week:boolean`）
+- [ ] `Task` モデル（`belongs_to :project`）
+- [ ] `Api::V1::TasksController` CRUD（`GET /?project_id=&this_week=`, `POST /`, `PATCH /:id`, `DELETE /:id`）
+  - `PATCH /:id` で `done` / `this_week` / `title` を個別更新
+  - `DELETE` プロジェクト削除時の連鎖対応済みであること確認
+
+**ScheduleEvent**
+- [ ] `schedule_events` テーブル作成（`title:string`, `date:date`, `start_minutes:integer`, `duration_minutes:integer`, `project_id:references nullable`, `task_id:references nullable`）
+- [ ] `ScheduleEvent` モデル（`belongs_to :project, optional: true`・`belongs_to :task, optional: true`）
+- [ ] `Api::V1::ScheduleEventsController` CRUD（`GET /?date_from=&date_to=`, `POST /`, `PATCH /:id`, `DELETE /:id`）
+
+#### 0.5b シード・API クライアント
+
+- [ ] API クライアント（`frontend/lib/api.ts`）実装（fetch wrapper + エラーハンドリング + 型定義）
+  - `workspaces` / `projects` / `tasks` / `scheduleEvents` 各リソースの CRUD 関数
+  - `tasks` 用: `listByThisWeek()` フィルタ対応
+
+#### 0.5c フロントエンド繋ぎこみ
+
+- [ ] `/workspaces` ページを API 接続に切り替え
+  - `workspace-store` → API 呼び出しに置き換え（初回ロード + 楽観的更新）
+  - `project-store` → API 呼び出しに置き換え
+  - `task-store` → API 呼び出しに置き換え（`done` / `this_week` PATCH を含む）
+- [ ] `/schedule` ページを API 接続に切り替え
+  - `schedule-store` → API 呼び出しに置き換え（週切り替え時に `date_from/to` で再取得）
+  - タスクパネルの `thisWeek` タスクを API から取得
+  - カレンダーへのドラッグ → `POST /api/v1/schedule_events`（`task_id` 付き）
+  - イベントのドラッグ移動・リサイズ → `PATCH /api/v1/schedule_events/:id`
+
+#### 0.5d 動作確認
+
+- [ ] E2E 動作確認（Workspace 作成 → Project 作成 → Task 作成 → 今週フラグ → スケジュール登録）
 
 ---
 
@@ -235,10 +283,11 @@ gem 'rack-cors'
 ```
 Phase 0  基盤セットアップ
     0.1  リポジトリ・環境構築
-    0.2  フロントエンド初期化（最新 Node.js + Next.js）  ← 今ここ
-    0.3  Workspace / Project / Task UI（フロントのみ・モックデータ）
-    0.4  バックエンド初期化（Rails）
-    0.5  バックエンド開発 + フロントエンド繋ぎこみ
+    0.2  フロントエンド初期化（最新 Node.js + Next.js）
+    0.3  Workspace / Project / Task UI（フロントのみ・モックデータ）  ✅ 完了
+    0.3a スケジュール UI（週間カレンダー・タスクパネル）  ✅ 完了
+    0.4  バックエンド初期化（Rails）  ✅ 完了
+    0.5  バックエンド開発 + フロントエンド繋ぎこみ  ← 今ここ
     ↓
 Phase 1  ダッシュボード + リソース管理 UI
     ↓
@@ -261,8 +310,9 @@ Phase 6  テスト・品質向上
 |---|---|
 | Phase 0.1（リポジトリ・環境構築） | 0.5日 ✅ 大半完了 |
 | Phase 0.2（フロントエンド初期化） | 0.5〜1日 |
-| Phase 0.3（Workspace/Project/Task UI） | 2〜3日 |
-| Phase 0.4（バックエンド初期化） | 0.5〜1日 |
+| Phase 0.3（Workspace/Project/Task UI） | 2〜3日 ✅ 完了 |
+| Phase 0.3a（スケジュール UI） | 1〜2日 ✅ 完了（ローディング・エラー状態のみ残） |
+| Phase 0.4（バックエンド初期化） | 0.5〜1日 ✅ 完了 |
 | Phase 0.5（BE 開発 + 繋ぎこみ） | 2〜3日 |
 | Phase 1（ダッシュボード + リソース管理） | 2〜3日 |
 | Phase 2（Redis/Chroma + コアエンジン） | 4〜6日 |

@@ -6,6 +6,7 @@ import { Separator } from "@/components/ui/separator";
 const breadcrumbMap: Record<string, string> = {
   "/": "ダッシュボード",
   "/workspaces": "Workspace",
+  "/schedule": "スケジュール",
   "/agents": "エージェント",
   "/resources": "リソース",
   "/settings": "設定",

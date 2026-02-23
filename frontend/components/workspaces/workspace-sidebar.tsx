@@ -32,19 +32,23 @@ export function WorkspaceSidebar({ selectedId, onSelect }: WorkspaceSidebarProps
     if (adding) newInputRef.current?.focus();
   }, [adding]);
 
-  function commitAdd() {
+  async function commitAdd() {
     const trimmed = newName.trim();
-    if (trimmed) {
-      const ws = createWorkspace({ name: trimmed });
-      onSelect(ws.id);
-      toast.success(`「${trimmed}」を作成しました`);
-    }
     setNewName("");
     setAdding(false);
+    if (trimmed) {
+      try {
+        const ws = await createWorkspace({ name: trimmed });
+        onSelect(ws.id);
+        toast.success(`「${trimmed}」を作成しました`);
+      } catch {
+        toast.error("ワークスペースの作成に失敗しました");
+      }
+    }
   }
 
   function handleAddKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter" && !e.nativeEvent.isComposing) commitAdd();
+    if (e.key === "Enter" && !e.nativeEvent.isComposing) { void commitAdd(); }
     if (e.key === "Escape") { setNewName(""); setAdding(false); }
   }
 
@@ -122,7 +126,7 @@ export function WorkspaceSidebar({ selectedId, onSelect }: WorkspaceSidebarProps
               ref={newInputRef}
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              onBlur={commitAdd}
+              onBlur={() => void commitAdd()}
               onKeyDown={handleAddKeyDown}
               placeholder="Workspace 名..."
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"

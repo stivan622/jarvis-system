@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Layers,
+  CalendarDays,
   Bot,
   Users,
   Settings,
@@ -20,6 +21,7 @@ import {
 const navItems = [
   { href: "/", label: "ダッシュボード", icon: LayoutDashboard },
   { href: "/workspaces", label: "Workspace", icon: Layers },
+  { href: "/schedule", label: "スケジュール", icon: CalendarDays },
   { href: "/agents", label: "エージェント", icon: Bot, disabled: true },
   { href: "/resources", label: "リソース", icon: Users, disabled: true },
 ];

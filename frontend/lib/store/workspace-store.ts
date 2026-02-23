@@ -1,72 +1,73 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { toast } from "sonner";
 import { Workspace } from "@/lib/types";
-
-function generateId(): string {
-  return crypto.randomUUID();
-}
-
-function now(): string {
-  return new Date().toISOString();
-}
-
-const INITIAL_WORKSPACES: Workspace[] = [
-  {
-    id: generateId(),
-    name: "個人プロジェクト",
-    createdAt: now(),
-    updatedAt: now(),
-  },
-  {
-    id: generateId(),
-    name: "Jarvis 開発",
-    createdAt: now(),
-    updatedAt: now(),
-  },
-];
+import { workspacesApi } from "@/lib/api";
 
 interface WorkspaceStore {
   workspaces: Workspace[];
-  createWorkspace: (data: Pick<Workspace, "name">) => Workspace;
-  updateWorkspace: (id: string, data: Pick<Workspace, "name">) => void;
+  loading: boolean;
+  init: () => Promise<void>;
+  createWorkspace: (data: Pick<Workspace, "name">) => Promise<Workspace>;
+  updateWorkspace: (id: string, data: Pick<Workspace, "name">) => Promise<void>;
   deleteWorkspace: (id: string) => void;
   getWorkspace: (id: string) => Workspace | undefined;
 }
 
-export const useWorkspaceStore = create<WorkspaceStore>()(
-  persist(
-    (set, get) => ({
-      workspaces: INITIAL_WORKSPACES,
+export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
+  workspaces: [],
+  loading: true,
 
-      createWorkspace: (data) => {
-        const workspace: Workspace = {
-          id: generateId(),
-          ...data,
-          createdAt: now(),
-          updatedAt: now(),
-        };
-        set((state) => ({ workspaces: [...state.workspaces, workspace] }));
-        return workspace;
-      },
+  init: async () => {
+    set({ loading: true });
+    try {
+      const workspaces = await workspacesApi.list();
+      set({ workspaces, loading: false });
+    } catch {
+      set({ loading: false });
+      toast.error("ワークスペースの読み込みに失敗しました");
+    }
+  },
 
-      updateWorkspace: (id, data) => {
+  createWorkspace: async (data) => {
+    const workspace = await workspacesApi.create(data);
+    set((state) => ({ workspaces: [...state.workspaces, workspace] }));
+    return workspace;
+  },
+
+  updateWorkspace: async (id, data) => {
+    const old = get().workspaces.find((w) => w.id === id);
+    set((state) => ({
+      workspaces: state.workspaces.map((w) =>
+        w.id === id ? { ...w, ...data } : w
+      ),
+    }));
+    try {
+      const updated = await workspacesApi.update(id, data);
+      set((state) => ({
+        workspaces: state.workspaces.map((w) => (w.id === id ? updated : w)),
+      }));
+    } catch {
+      if (old) {
         set((state) => ({
-          workspaces: state.workspaces.map((w) =>
-            w.id === id ? { ...w, ...data, updatedAt: now() } : w
-          ),
+          workspaces: state.workspaces.map((w) => (w.id === id ? old : w)),
         }));
-      },
+      }
+      toast.error("ワークスペースの更新に失敗しました");
+    }
+  },
 
-      deleteWorkspace: (id) => {
-        set((state) => ({
-          workspaces: state.workspaces.filter((w) => w.id !== id),
-        }));
-      },
+  deleteWorkspace: (id) => {
+    const old = get().workspaces.find((w) => w.id === id);
+    set((state) => ({
+      workspaces: state.workspaces.filter((w) => w.id !== id),
+    }));
+    workspacesApi.delete(id).catch(() => {
+      if (old) {
+        set((state) => ({ workspaces: [...state.workspaces, old] }));
+      }
+      toast.error("ワークスペースの削除に失敗しました");
+    });
+  },
 
-      getWorkspace: (id) => {
-        return get().workspaces.find((w) => w.id === id);
-      },
-    }),
-    { name: "jarvis-workspaces" }
-  )
-);
+  getWorkspace: (id) => get().workspaces.find((w) => w.id === id),
+}));
