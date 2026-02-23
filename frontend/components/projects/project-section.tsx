@@ -331,7 +331,7 @@ export function ProjectSection({ workspaceId, workspaceName, showOnlyThisWeek = 
               ))}
 
               {/* Add task input */}
-              {!showOnlyThisWeek && addingTaskFor === project.id ? (
+              {!showOnlyThisWeek && addingTaskFor === project.id && (
                 <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
                   <div className="h-4 w-4 flex-shrink-0" />
                   <input
@@ -344,15 +344,7 @@ export function ProjectSection({ workspaceId, workspaceName, showOnlyThisWeek = 
                     className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                   />
                 </div>
-              ) : !showOnlyThisWeek ? (
-                <button
-                  onClick={() => { setAddingTaskFor(project.id); setNewTaskTitle(""); }}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  タスクを追加
-                </button>
-              ) : null}
+              )}
             </div>
           </div>
         );

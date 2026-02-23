@@ -34,3 +34,38 @@ export interface ScheduleEvent {
   createdAt: string;
   updatedAt: string;
 }
+
+// ----- Google Calendar -----
+
+export interface GoogleCalendarAccount {
+  id: string;
+  email: string;
+  name: string | null;
+  pictureUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GoogleCalendarCalendar {
+  id: string | null;
+  calendarId: string;
+  name: string;
+  color: string;
+  enabled: boolean;
+}
+
+export interface GoogleCalendarEvent {
+  id: string;                  // "gcal_{googleCalendarId}_{googleEventId}"
+  googleEventId: string;
+  googleCalendarId: string;
+  googleAccountId: string;
+  title: string;
+  date: string;                // YYYY-MM-DD
+  startMinutes: number;
+  durationMinutes: number;
+  allDay: boolean;
+  color: string;
+  calendarName: string;
+  accountEmail: string;
+  meetLink?: string | null;    // Google Meet URL
+}

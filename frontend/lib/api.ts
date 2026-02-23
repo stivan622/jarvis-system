@@ -1,4 +1,4 @@
-import { Workspace, Project, Task, ScheduleEvent } from "@/lib/types";
+import { Workspace, Project, Task, ScheduleEvent, GoogleCalendarAccount, GoogleCalendarCalendar, GoogleCalendarEvent } from "@/lib/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
@@ -201,5 +201,49 @@ export const scheduleEventsApi = {
   },
   delete(id: string): Promise<void> {
     return request<void>(`/api/v1/schedule_events/${id}`, { method: "DELETE" });
+  },
+};
+
+// ----- Google Calendar -----
+
+export const googleCalendarApi = {
+  getAuthUrl(): Promise<{ url: string }> {
+    return request<{ url: string }>("/api/v1/google_calendar/auth_url");
+  },
+
+  listAccounts(): Promise<GoogleCalendarAccount[]> {
+    return request<GoogleCalendarAccount[]>("/api/v1/google_calendar/accounts");
+  },
+
+  deleteAccount(id: string): Promise<void> {
+    return request<void>(`/api/v1/google_calendar/accounts/${id}`, { method: "DELETE" });
+  },
+
+  listCalendars(accountId: string): Promise<GoogleCalendarCalendar[]> {
+    return request<GoogleCalendarCalendar[]>(
+      `/api/v1/google_calendar/accounts/${accountId}/calendars`
+    );
+  },
+
+  updateCalendar(
+    accountId: string,
+    calendarId: string,
+    data: Partial<Pick<GoogleCalendarCalendar, "name" | "color" | "enabled">>
+  ): Promise<GoogleCalendarCalendar> {
+    return request<GoogleCalendarCalendar>(
+      `/api/v1/google_calendar/accounts/${accountId}/calendars/${encodeURIComponent(calendarId)}`,
+      {
+        method: "PATCH",
+        ...body(data as Record<string, unknown>, "calendar"),
+      }
+    );
+  },
+
+  listEvents(params?: { dateFrom?: string; dateTo?: string }): Promise<GoogleCalendarEvent[]> {
+    const qs = new URLSearchParams();
+    if (params?.dateFrom) qs.set("date_from", params.dateFrom);
+    if (params?.dateTo) qs.set("date_to", params.dateTo);
+    const q = qs.toString();
+    return request<GoogleCalendarEvent[]>(`/api/v1/google_calendar/events${q ? `?${q}` : ""}`);
   },
 };

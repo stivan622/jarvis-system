@@ -8,6 +8,7 @@ import { useTaskStore } from "@/lib/store/task-store";
 import { useProjectStore } from "@/lib/store/project-store";
 import { useScheduleStore } from "@/lib/store/schedule-store";
 import { Task } from "@/lib/types";
+import { GoogleCalendarPanel } from "@/components/schedule/google-calendar-panel";
 
 function TaskPanelSkeleton() {
   return (
@@ -196,14 +197,8 @@ export function TaskPanel() {
         )}
       </div>
 
-      {/* フッターヒント */}
-      {total > 0 && (
-        <div className="flex-shrink-0 border-t px-3 py-2">
-          <p className="text-center text-[10px] text-muted-foreground/50">
-            ドラッグしてカレンダーに追加
-          </p>
-        </div>
-      )}
+      {/* Google Calendar 連携パネル */}
+      <GoogleCalendarPanel />
     </div>
   );
 }

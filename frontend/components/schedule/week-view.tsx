@@ -1,14 +1,15 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { CheckSquare, ChevronLeft, ChevronRight, Clock, Edit2, Square, Trash2 } from "lucide-react";
+import { CheckSquare, ChevronLeft, ChevronRight, Clock, Edit2, Square, Trash2, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { ScheduleEvent } from "@/lib/types";
+import { GoogleCalendarEvent, ScheduleEvent } from "@/lib/types";
 import { useScheduleStore } from "@/lib/store/schedule-store";
 import { useTaskStore } from "@/lib/store/task-store";
+import { useGoogleCalendarStore } from "@/lib/store/google-calendar-store";
 import { EventDialog, formatTime } from "./event-dialog";
 import { TASK_DRAG_MIME } from "./task-panel";
 
@@ -49,54 +50,47 @@ function isToday(date: Date) {
 }
 
 // ---- 重なりレイアウト計算 ----
-type LayoutEvent = {
-  event: ScheduleEvent;
+type SlotItem = { id: string; startMinutes: number; durationMinutes: number };
+
+type LayoutItem<T extends SlotItem> = {
+  item: T;
   column: number;
   totalColumns: number;
 };
 
-function computeLayout(events: ScheduleEvent[]): LayoutEvent[] {
-  if (events.length === 0) return [];
+function computeLayoutGeneric<T extends SlotItem>(items: T[]): LayoutItem<T>[] {
+  if (items.length === 0) return [];
 
-  // 開始時刻順にソート
-  const sorted = [...events].sort((a, b) => a.startMinutes - b.startMinutes);
+  const sorted = [...items].sort((a, b) => a.startMinutes - b.startMinutes);
+  const columns: number[] = [];
+  const assignments: { item: T; column: number }[] = [];
 
-  // 列割り当て: グリーディーにアクティブな列を管理
-  const columns: number[] = []; // columns[i] = そのカラムの現在の終了分
-  const assignments: { event: ScheduleEvent; column: number }[] = [];
-
-  for (const event of sorted) {
-    const end = event.startMinutes + event.durationMinutes;
-    // 空いている列を探す
+  for (const item of sorted) {
+    const end = item.startMinutes + item.durationMinutes;
     let placed = false;
     for (let col = 0; col < columns.length; col++) {
-      if (columns[col] <= event.startMinutes) {
+      if (columns[col] <= item.startMinutes) {
         columns[col] = end;
-        assignments.push({ event, column: col });
+        assignments.push({ item, column: col });
         placed = true;
         break;
       }
     }
     if (!placed) {
       columns.push(end);
-      assignments.push({ event, column: columns.length - 1 });
+      assignments.push({ item, column: columns.length - 1 });
     }
   }
 
-  // 各イベントの totalColumns を計算
-  // overlapping group: 全てのイベントに対して、同じ時間帯に重なる最大列数を求める
-  const result: LayoutEvent[] = assignments.map(({ event, column }) => {
-    const end = event.startMinutes + event.durationMinutes;
-    // このイベントと重なる全イベントを収集
-    const overlapping = assignments.filter(({ event: other }) => {
+  return assignments.map(({ item, column }) => {
+    const end = item.startMinutes + item.durationMinutes;
+    const overlapping = assignments.filter(({ item: other }) => {
       const otherEnd = other.startMinutes + other.durationMinutes;
-      return other.startMinutes < end && otherEnd > event.startMinutes;
+      return other.startMinutes < end && otherEnd > item.startMinutes;
     });
     const maxCol = Math.max(...overlapping.map((o) => o.column));
-    return { event, column, totalColumns: maxCol + 1 };
+    return { item, column, totalColumns: maxCol + 1 };
   });
-
-  return result;
 }
 
 
@@ -287,8 +281,8 @@ function EventBlock({
         "event-block absolute z-10 select-none overflow-hidden rounded px-1.5 py-0.5 text-white ring-1 ring-white/40",
         isTask
           ? isDragging
-            ? "z-30 cursor-grabbing bg-slate-500 opacity-90 shadow-2xl ring-2 ring-slate-300"
-            : "cursor-grab bg-slate-500 transition-colors hover:bg-slate-600"
+            ? "z-30 cursor-grabbing bg-slate-400 opacity-90 shadow-2xl ring-2 ring-slate-200"
+            : "cursor-grab bg-slate-400 transition-colors hover:bg-slate-500"
           : isDragging
             ? "z-30 cursor-grabbing bg-blue-500 opacity-90 shadow-2xl ring-2 ring-blue-300"
             : "cursor-grab bg-blue-500 transition-colors hover:bg-blue-600"
@@ -352,6 +346,105 @@ function EventBlock({
         />
       )}
     </div>
+  );
+}
+
+// ---- GCalEventBlock ----
+function GCalEventBlock({
+  event,
+  column,
+  totalColumns,
+}: {
+  event: GoogleCalendarEvent;
+  column: number;
+  totalColumns: number;
+}) {
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+
+  const top = (event.startMinutes / 15) * SLOT_HEIGHT;
+  const height = Math.max((event.durationMinutes / 15) * SLOT_HEIGHT, SLOT_HEIGHT);
+
+  const GAP = 2;
+  const widthPct = `calc(${100 / totalColumns}% - ${GAP}px)`;
+  const leftPct = `calc(${(column / totalColumns) * 100}% + ${column > 0 ? GAP / 2 : 1}px)`;
+
+  function handleClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    setTooltipPos({ x: e.clientX, y: e.clientY });
+    setShowTooltip((v) => !v);
+  }
+
+  return (
+    <>
+      <div
+        className="event-block absolute z-10 select-none overflow-hidden rounded px-1.5 py-0.5 text-white ring-1 ring-white/30 cursor-pointer opacity-90 hover:opacity-100 transition-opacity"
+        style={{
+          top,
+          height,
+          left: leftPct,
+          width: widthPct,
+          backgroundColor: event.color,
+          backgroundImage: `repeating-linear-gradient(
+            45deg,
+            transparent,
+            transparent 4px,
+            rgba(255,255,255,0.08) 4px,
+            rgba(255,255,255,0.08) 8px
+          )`,
+        }}
+        onClick={handleClick}
+      >
+        <p className="min-w-0 truncate text-xs font-medium leading-tight">{event.title}</p>
+        {height > SLOT_HEIGHT * 1.5 && (
+          <p className="text-[10px] leading-tight opacity-80">
+            {formatTime(event.startMinutes)}–{formatTime(event.startMinutes + event.durationMinutes)}
+          </p>
+        )}
+      </div>
+
+      {showTooltip && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setShowTooltip(false)} />
+          <div
+            className="fixed z-50 w-56 overflow-hidden rounded-lg border bg-background shadow-xl p-3"
+            style={{
+              left: Math.min(tooltipPos.x + 8, (typeof window !== "undefined" ? window.innerWidth : 800) - 240),
+              top: Math.min(tooltipPos.y - 8, (typeof window !== "undefined" ? window.innerHeight : 600) - 140),
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-2 mb-2">
+              <div
+                className="mt-0.5 h-3 w-3 flex-shrink-0 rounded-full"
+                style={{ backgroundColor: event.color }}
+              />
+              <p className="text-sm font-medium leading-tight">{event.title}</p>
+            </div>
+            <p className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Clock className="h-3 w-3 flex-shrink-0" />
+              {event.allDay
+                ? "終日"
+                : `${formatTime(event.startMinutes)}–${formatTime(event.startMinutes + event.durationMinutes)}`}
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground/70 truncate">{event.calendarName}</p>
+            <p className="text-[10px] text-muted-foreground/50 truncate">{event.accountEmail}</p>
+            {event.meetLink && (
+              <a
+                href={event.meetLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 flex items-center gap-1.5 rounded-md bg-[#1a73e8] px-2.5 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Video className="h-3 w-3 flex-shrink-0" />
+                Google Meet に参加
+              </a>
+            )}
+          </div>
+        </>
+      )}
+    </>
   );
 }
 
@@ -460,6 +553,7 @@ function EventQuickView({
 function DayColumn({
   day,
   events,
+  gcalEvents,
   currentMinutes,
   creatingSlot,
   draggingEventId,
@@ -475,6 +569,7 @@ function DayColumn({
 }: {
   day: Date;
   events: ScheduleEvent[];
+  gcalEvents: GoogleCalendarEvent[];
   currentMinutes: number;
   creatingSlot: CreatingSlot;
   draggingEventId: string | null;
@@ -536,8 +631,21 @@ function DayColumn({
     onSlotClick(dateStr, startMins);
   }
 
-  // 重なりレイアウト計算
-  const layout = useMemo(() => computeLayout(events), [events]);
+  // GCalイベントとシステムイベントを統合してレイアウト計算（重なりを正しく処理）
+  const filteredGcalEvents = useMemo(() => gcalEvents.filter((e) => !e.allDay), [gcalEvents]);
+
+  const combinedLayoutMap = useMemo(() => {
+    const allSlotItems: SlotItem[] = [
+      ...events.map((e) => ({ id: e.id, startMinutes: e.startMinutes, durationMinutes: e.durationMinutes })),
+      ...filteredGcalEvents.map((e) => ({ id: e.id, startMinutes: e.startMinutes, durationMinutes: e.durationMinutes })),
+    ];
+    const result = computeLayoutGeneric(allSlotItems);
+    const map = new Map<string, { column: number; totalColumns: number }>();
+    for (const { item, column, totalColumns } of result) {
+      map.set(item.id, { column, totalColumns });
+    }
+    return map;
+  }, [events, filteredGcalEvents]);
 
   return (
     <div
@@ -564,19 +672,34 @@ function DayColumn({
         />
       ))}
 
-      {/* イベント（重なりレイアウト付き） */}
-      {layout.map(({ event, column, totalColumns }) => (
-        <EventBlock
-          key={event.id}
-          event={event}
-          isDragging={event.id === draggingEventId}
-          column={column}
-          totalColumns={totalColumns}
+      {/* Google Calendar イベント（読み取り専用） */}
+      {filteredGcalEvents.map((event) => {
+        const { column, totalColumns } = combinedLayoutMap.get(event.id) ?? { column: 0, totalColumns: 1 };
+        return (
+          <GCalEventBlock
+            key={event.id}
+            event={event}
+            column={column}
+            totalColumns={totalColumns}
+          />
+        );
+      })}
 
-          onStartMove={onStartMove}
-          onStartResize={onStartResize}
-        />
-      ))}
+      {/* イベント（重なりレイアウト付き） */}
+      {events.map((event) => {
+        const { column, totalColumns } = combinedLayoutMap.get(event.id) ?? { column: 0, totalColumns: 1 };
+        return (
+          <EventBlock
+            key={event.id}
+            event={event}
+            isDragging={event.id === draggingEventId}
+            column={column}
+            totalColumns={totalColumns}
+            onStartMove={onStartMove}
+            onStartResize={onStartResize}
+          />
+        );
+      })}
 
       {/* インライン作成ブロック */}
       {isCreatingHere && creatingSlot && (
@@ -665,6 +788,7 @@ function WeekViewSkeleton() {
 // ---- WeekView ----
 export function WeekView() {
   const { events, loading, createEvent, updateEvent, deleteEvent, init: scheduleInit } = useScheduleStore();
+  const { events: gcalEvents, loadEvents: loadGcalEvents } = useGoogleCalendarStore();
 
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
   const days = getWeekDays(weekStart);
@@ -674,10 +798,12 @@ export function WeekView() {
   useEffect(() => {
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 6);
-    scheduleInit({
+    const params = {
       dateFrom: toDateStr(weekStart),
       dateTo: toDateStr(weekEnd),
-    });
+    };
+    scheduleInit(params);
+    loadGcalEvents(params);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekStart]);
 
@@ -1109,6 +1235,13 @@ export function WeekView() {
             {days.map((day, i) => {
               const dateStr = toDateStr(day);
               const dayEvents = displayEvents.filter((e) => e.date === dateStr);
+              // GCal イベントの date はイベントのタイムゾーン（JST 等）の日付文字列
+              // WeekView の dateStr は toISOString()（UTC）ベースなので、
+              // GCal 側も同じ変換（ローカル midnight → UTC 日付）を当ててから比較する
+              const dayGcalEvents = gcalEvents.filter((e) => {
+                const utcDate = new Date(e.date + "T00:00:00").toISOString().split("T")[0];
+                return utcDate === dateStr;
+              });
               const isCreatingHere = creatingSlot?.date === dateStr;
 
               return (
@@ -1116,6 +1249,7 @@ export function WeekView() {
                   key={i}
                   day={day}
                   events={dayEvents}
+                  gcalEvents={dayGcalEvents}
                   currentMinutes={currentMinutes}
                   creatingSlot={isCreatingHere ? creatingSlot : null}
                   draggingEventId={dragging?.activated ? dragging.eventId : null}
