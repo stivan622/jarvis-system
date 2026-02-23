@@ -203,3 +203,15 @@ export const scheduleEventsApi = {
     return request<void>(`/api/v1/schedule_events/${id}`, { method: "DELETE" });
   },
 };
+
+// ----- Google Calendar -----
+
+export const googleCalendarApi = {
+  list(params?: { dateFrom?: string; dateTo?: string }): Promise<ScheduleEvent[]> {
+    const qs = new URLSearchParams();
+    if (params?.dateFrom) qs.set("date_from", params.dateFrom);
+    if (params?.dateTo) qs.set("date_to", params.dateTo);
+    const q = qs.toString();
+    return request<ScheduleEvent[]>(`/api/v1/google_calendar${q ? `?${q}` : ""}`);
+  },
+};

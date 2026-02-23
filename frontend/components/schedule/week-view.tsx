@@ -160,25 +160,28 @@ function EventBlock({
 
   const { tasks, updateTask } = useTaskStore();
   const linkedTask = event.taskId ? tasks.find((t) => t.id === event.taskId) : undefined;
-  const isTask = linkedTask !== undefined;
+  const isGoogle = event.source === "google";
+  const isTask = !isGoogle && linkedTask !== undefined;
 
   return (
     <div
       className={cn(
         "event-block absolute left-0.5 right-0.5 z-10 select-none overflow-hidden rounded px-1.5 py-0.5 text-white",
-        isTask
-          ? isDragging
-            ? "z-30 cursor-grabbing bg-slate-500/90 opacity-90 shadow-xl ring-2 ring-slate-300"
-            : "cursor-grab bg-slate-500/90 transition-colors hover:bg-slate-600"
-          : isDragging
-            ? "z-30 cursor-grabbing bg-blue-500/90 opacity-90 shadow-xl ring-2 ring-blue-300"
-            : "cursor-grab bg-blue-500/90 transition-colors hover:bg-blue-600"
+        isGoogle
+          ? "cursor-default bg-emerald-500/90 transition-colors hover:bg-emerald-600"
+          : isTask
+            ? isDragging
+              ? "z-30 cursor-grabbing bg-slate-500/90 opacity-90 shadow-xl ring-2 ring-slate-300"
+              : "cursor-grab bg-slate-500/90 transition-colors hover:bg-slate-600"
+            : isDragging
+              ? "z-30 cursor-grabbing bg-blue-500/90 opacity-90 shadow-xl ring-2 ring-blue-300"
+              : "cursor-grab bg-blue-500/90 transition-colors hover:bg-blue-600"
       )}
       style={{ top, height }}
       onMouseDown={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        onStartMove(event, e.clientX, e.clientY);
+        if (!isGoogle) onStartMove(event, e.clientX, e.clientY);
       }}
     >
       <div className="flex items-start gap-1">
@@ -212,13 +215,16 @@ function EventBlock({
         </p>
       </div>
       {height > SLOT_HEIGHT * 1.5 && (
-        <p className={cn("text-[10px] leading-tight", isTask ? "text-slate-100" : "text-blue-100")}>
+        <p className={cn("text-[10px] leading-tight", isGoogle ? "text-emerald-100" : isTask ? "text-slate-100" : "text-blue-100")}>
           {formatTime(event.startMinutes)}–{formatTime(event.startMinutes + event.durationMinutes)}
         </p>
       )}
+      {isGoogle && height > SLOT_HEIGHT * 2 && (
+        <p className="text-[9px] leading-tight text-emerald-100/70">Google Cal</p>
+      )}
 
-      {/* リサイズハンドル */}
-      {!isDragging && (
+      {/* リサイズハンドル（Google イベントには表示しない） */}
+      {!isDragging && !isGoogle && (
         <div
           className="absolute bottom-0 left-0 right-0 flex h-2 cursor-s-resize items-center justify-center opacity-0 hover:opacity-100 group-hover:opacity-100"
           onMouseDown={(e) => {
@@ -724,25 +730,29 @@ export function WeekView() {
       if (!prev) return null;
 
       if (prev.activated) {
-        // 移動/リサイズを確定
-        dragResultRef.current = {
-          save: {
-            ...prev.original,
-            date: prev.currentDate,
-            startMinutes: prev.currentStartMinutes,
-            durationMinutes: prev.currentDurationMinutes,
-            updatedAt: new Date().toISOString(),
-          },
-        };
+        // 移動/リサイズを確定（Google イベントは操作不可なので skip）
+        if (prev.original.source !== "google") {
+          dragResultRef.current = {
+            save: {
+              ...prev.original,
+              date: prev.currentDate,
+              startMinutes: prev.currentStartMinutes,
+              durationMinutes: prev.currentDurationMinutes,
+              updatedAt: new Date().toISOString(),
+            },
+          };
+        }
       } else {
-        // 移動なし → クリックとして扱いクイックビューを開く
-        dragResultRef.current = {
-          click: {
-            event: prev.original,
-            x: prev.startClientX,
-            y: prev.startClientY,
-          },
-        };
+        // 移動なし → クリックとして扱いクイックビューを開く（Google イベントは skip）
+        if (prev.original.source !== "google") {
+          dragResultRef.current = {
+            click: {
+              event: prev.original,
+              x: prev.startClientX,
+              y: prev.startClientY,
+            },
+          };
+        }
       }
       return null;
     });

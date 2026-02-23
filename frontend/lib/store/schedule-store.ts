@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { toast } from "sonner";
 import { ScheduleEvent } from "@/lib/types";
-import { scheduleEventsApi } from "@/lib/api";
+import { scheduleEventsApi, googleCalendarApi } from "@/lib/api";
 
 interface ScheduleStore {
   events: ScheduleEvent[];
@@ -19,8 +19,22 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
   init: async (params) => {
     set({ loading: true });
     try {
-      const events = await scheduleEventsApi.list(params);
-      set({ events, loading: false });
+      const [localResult, googleResult] = await Promise.allSettled([
+        scheduleEventsApi.list(params),
+        googleCalendarApi.list(params),
+      ]);
+
+      const local = localResult.status === "fulfilled" ? localResult.value : [];
+      const google = googleResult.status === "fulfilled" ? googleResult.value : [];
+
+      if (googleResult.status === "rejected") {
+        console.warn("Google Calendar fetch failed:", googleResult.reason);
+      }
+
+      const taggedLocal = local.map((e) => ({ ...e, source: "local" as const }));
+      const taggedGoogle = google.map((e) => ({ ...e, source: "google" as const }));
+
+      set({ events: [...taggedLocal, ...taggedGoogle], loading: false });
     } catch {
       set({ loading: false });
       toast.error("スケジュールの読み込みに失敗しました");
@@ -29,12 +43,15 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
 
   createEvent: async (data) => {
     const event = await scheduleEventsApi.create(data);
-    set((state) => ({ events: [...state.events, event] }));
+    set((state) => ({ events: [...state.events, { ...event, source: "local" as const }] }));
     return event;
   },
 
   updateEvent: (id, data) => {
-    const old = get().events.find((e) => e.id === id);
+    const target = get().events.find((e) => e.id === id);
+    if (target?.source === "google") return;
+
+    const old = target;
     set((state) => ({
       events: state.events.map((e) =>
         e.id === id ? { ...e, ...data } : e
@@ -42,7 +59,7 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
     }));
     scheduleEventsApi.update(id, data).then((updated) => {
       set((state) => ({
-        events: state.events.map((e) => (e.id === id ? updated : e)),
+        events: state.events.map((e) => (e.id === id ? { ...updated, source: "local" as const } : e)),
       }));
     }).catch(() => {
       if (old) {
@@ -55,7 +72,10 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
   },
 
   deleteEvent: (id) => {
-    const old = get().events.find((e) => e.id === id);
+    const target = get().events.find((e) => e.id === id);
+    if (target?.source === "google") return;
+
+    const old = target;
     set((state) => ({ events: state.events.filter((e) => e.id !== id) }));
     scheduleEventsApi.delete(id).catch(() => {
       if (old) {

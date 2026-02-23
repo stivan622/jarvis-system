@@ -31,6 +31,7 @@ export interface ScheduleEvent {
   durationMinutes: number;  // 15以上、15の倍数
   projectId?: string;
   taskId?: string;          // タスクと紐付ける場合のタスクID
+  source?: "local" | "google"; // イベントの取得元（未指定は local 扱い）
   createdAt: string;
   updatedAt: string;
 }

@@ -7,6 +7,7 @@ Rails.application.routes.draw do
       resources :projects, only: %i[index show create update destroy]
       resources :tasks, only: %i[index show create update destroy]
       resources :schedule_events, only: %i[index show create update destroy]
+      resources :google_calendar, only: %i[index]
     end
   end
 end
