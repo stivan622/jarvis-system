@@ -15,7 +15,7 @@ interface InlineEditProps {
   onSave: (value: string) => void;
   /** Enter 確定後に呼ばれる（空欄でも呼ばれる）。次のアイテム追加モードへ移行するために使う */
   onEnter?: () => void;
-  /** 空欄 Backspace で呼ばれる。アイテム削除に使う */
+  /** 空欄 Backspace または空欄 blur で呼ばれる。アイテム削除に使う */
   onDelete?: () => void;
   placeholder?: string;
   className?: string;
@@ -49,11 +49,16 @@ export const InlineEdit = forwardRef<InlineEditHandle, InlineEditProps>(
       }
     }, [editing]);
 
-    /** blur 時: 空欄なら元に戻す（誤削除防止）、変更があれば保存 */
+    /** blur 時: 空欄なら削除コールバック、変更があれば保存 */
     function commit() {
       const trimmed = draft.trim();
-      if (trimmed && trimmed !== value) onSave(trimmed);
-      else setDraft(value);
+      if (!trimmed) {
+        // 空欄で blur → 削除
+        setEditing(false);
+        onDelete?.();
+        return;
+      }
+      if (trimmed !== value) onSave(trimmed);
       setEditing(false);
     }
 

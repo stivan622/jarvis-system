@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect, KeyboardEvent } from "react";
-import { Plus, Trash2, Layers, LayoutGrid } from "lucide-react";
+import { useState, useRef, useEffect, KeyboardEvent, DragEvent } from "react";
+import { Plus, Trash2, Layers, LayoutGrid, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useWorkspaceStore } from "@/lib/store/workspace-store";
@@ -19,14 +19,18 @@ interface WorkspaceSidebarProps {
 }
 
 export function WorkspaceSidebar({ selectedId, onSelect }: WorkspaceSidebarProps) {
-  const { workspaces, createWorkspace, updateWorkspace, deleteWorkspace } = useWorkspaceStore();
-  const { projects, deleteProjectsByWorkspace } = useProjectStore();
+  const { workspaces, createWorkspace, updateWorkspace, deleteWorkspace, reorderWorkspaces } = useWorkspaceStore();
+  const { projects, deleteProjectsByWorkspace, moveProject } = useProjectStore();
   const { deleteTasksByProjects } = useTaskStore();
 
   const [deleteTarget, setDeleteTarget] = useState<Workspace | null>(null);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const newInputRef = useRef<HTMLInputElement>(null);
+
+  // Drag state
+  const [dragWsId, setDragWsId] = useState<string | null>(null);
+  const [dragOverWsId, setDragOverWsId] = useState<string | null>(null);
 
   useEffect(() => {
     if (adding) newInputRef.current?.focus();
@@ -64,6 +68,71 @@ export function WorkspaceSidebar({ selectedId, onSelect }: WorkspaceSidebarProps
     setDeleteTarget(null);
   }
 
+  // ---- Workspace drag handlers ----
+
+  function handleDragStart(e: DragEvent, wsId: string) {
+    setDragWsId(wsId);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("application/jarvis-workspace", wsId);
+  }
+
+  function handleDragOver(e: DragEvent, wsId: string) {
+    if (!dragWsId) return;
+
+    // Allow dropping a project onto a workspace
+    const projectId = e.dataTransfer.types.includes("application/jarvis-project")
+      ? e.dataTransfer.getData("application/jarvis-project")
+      : null;
+    if (projectId) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      setDragOverWsId(wsId);
+      return;
+    }
+
+    if (dragWsId === wsId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverWsId(wsId);
+  }
+
+  function handleDrop(e: DragEvent, targetWsId: string) {
+    e.preventDefault();
+
+    // Project dropped onto workspace → move project
+    const projectId = e.dataTransfer.getData("application/jarvis-project");
+    if (projectId) {
+      moveProject(projectId, targetWsId);
+      toast.success("プロジェクトを移動しました");
+      setDragOverWsId(null);
+      return;
+    }
+
+    // Workspace reorder
+    if (!dragWsId || dragWsId === targetWsId) return;
+
+    const sortedWorkspaces = [...workspaces].sort((a, b) => a.position - b.position);
+    const ids = sortedWorkspaces.map((w) => w.id);
+    const fromIdx = ids.indexOf(dragWsId);
+    const toIdx = ids.indexOf(targetWsId);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const newIds = [...ids];
+    newIds.splice(fromIdx, 1);
+    newIds.splice(toIdx, 0, dragWsId);
+    reorderWorkspaces(newIds);
+
+    setDragWsId(null);
+    setDragOverWsId(null);
+  }
+
+  function handleDragEnd() {
+    setDragWsId(null);
+    setDragOverWsId(null);
+  }
+
+  const sortedWorkspaces = [...workspaces].sort((a, b) => a.position - b.position);
+
   return (
     <aside className="flex h-full w-56 flex-shrink-0 flex-col border-r bg-muted/30">
       <div className="flex items-center gap-2 px-4 py-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
@@ -89,16 +158,29 @@ export function WorkspaceSidebar({ selectedId, onSelect }: WorkspaceSidebarProps
         <div className="my-1 border-t" />
 
         {/* 個別 Workspace */}
-        {workspaces.map((ws) => (
+        {sortedWorkspaces.map((ws) => (
           <div
             key={ws.id}
             className={cn(
               "group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
               selectedId === ws.id
                 ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+              dragWsId === ws.id && "opacity-40",
+              dragOverWsId === ws.id && "ring-1 ring-primary/50 bg-accent/70"
             )}
+            onDragOver={(e) => handleDragOver(e, ws.id)}
+            onDrop={(e) => handleDrop(e, ws.id)}
           >
+            <div
+              className="flex-shrink-0 cursor-grab opacity-0 group-hover:opacity-40 active:cursor-grabbing"
+              draggable
+              onDragStart={(e) => handleDragStart(e, ws.id)}
+              onDragEnd={handleDragEnd}
+            >
+              <GripVertical className="h-3.5 w-3.5" />
+            </div>
+
             <button
               className="min-w-0 flex-1 text-left"
               onClick={() => onSelect(ws.id)}
@@ -106,6 +188,7 @@ export function WorkspaceSidebar({ selectedId, onSelect }: WorkspaceSidebarProps
               <InlineEdit
                 value={ws.name}
                 onSave={(name) => updateWorkspace(ws.id, { name })}
+                onDelete={() => setDeleteTarget(ws)}
                 placeholder="名前なし"
                 className="text-sm font-medium"
               />

@@ -8,8 +8,10 @@ interface ProjectStore {
   loading: boolean;
   init: () => Promise<void>;
   createProject: (workspaceId: string, name: string) => Promise<Project>;
-  updateProject: (id: string, name: string) => Promise<void>;
+  updateProject: (id: string, data: Partial<Pick<Project, "name" | "workspaceId">>) => Promise<void>;
   deleteProject: (id: string) => void;
+  reorderProjects: (workspaceId: string, orderedIds: string[]) => void;
+  moveProject: (id: string, toWorkspaceId: string) => void;
   /** Backend cascades, so this is local-state cleanup only. Returns removed project IDs. */
   deleteProjectsByWorkspace: (workspaceId: string) => string[];
 }
@@ -35,15 +37,15 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     return project;
   },
 
-  updateProject: async (id, name) => {
+  updateProject: async (id, data) => {
     const old = get().projects.find((p) => p.id === id);
     set((state) => ({
       projects: state.projects.map((p) =>
-        p.id === id ? { ...p, name } : p
+        p.id === id ? { ...p, ...data } : p
       ),
     }));
     try {
-      const updated = await projectsApi.update(id, { name });
+      const updated = await projectsApi.update(id, data);
       set((state) => ({
         projects: state.projects.map((p) => (p.id === id ? updated : p)),
       }));
@@ -55,6 +57,42 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       }
       toast.error("プロジェクトの更新に失敗しました");
     }
+  },
+
+  reorderProjects: (workspaceId, orderedIds) => {
+    const updated = orderedIds.map((id, index) => ({ id, position: index }));
+    set((state) => {
+      const posMap = new Map(updated.map((u) => [u.id, u.position]));
+      return {
+        projects: state.projects.map((p) => {
+          const pos = posMap.get(p.id);
+          return pos !== undefined ? { ...p, position: pos } : p;
+        }),
+      };
+    });
+    updated.forEach(({ id, position }) => {
+      projectsApi.update(id, { position }).catch(() => {
+        toast.error("プロジェクトの並び替えに失敗しました");
+      });
+    });
+    void workspaceId;
+  },
+
+  moveProject: (id, toWorkspaceId) => {
+    const old = get().projects.find((p) => p.id === id);
+    set((state) => ({
+      projects: state.projects.map((p) =>
+        p.id === id ? { ...p, workspaceId: toWorkspaceId } : p
+      ),
+    }));
+    projectsApi.update(id, { workspaceId: toWorkspaceId }).catch(() => {
+      if (old) {
+        set((state) => ({
+          projects: state.projects.map((p) => (p.id === id ? old : p)),
+        }));
+      }
+      toast.error("プロジェクトの移動に失敗しました");
+    });
   },
 
   deleteProject: (id) => {

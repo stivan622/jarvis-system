@@ -8,8 +8,9 @@ interface WorkspaceStore {
   loading: boolean;
   init: () => Promise<void>;
   createWorkspace: (data: Pick<Workspace, "name">) => Promise<Workspace>;
-  updateWorkspace: (id: string, data: Pick<Workspace, "name">) => Promise<void>;
+  updateWorkspace: (id: string, data: Partial<Pick<Workspace, "name">>) => Promise<void>;
   deleteWorkspace: (id: string) => void;
+  reorderWorkspaces: (orderedIds: string[]) => void;
   getWorkspace: (id: string) => Workspace | undefined;
 }
 
@@ -42,7 +43,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       ),
     }));
     try {
-      const updated = await workspacesApi.update(id, data);
+      const updated = await workspacesApi.update(id, data as Pick<Workspace, "name">);
       set((state) => ({
         workspaces: state.workspaces.map((w) => (w.id === id ? updated : w)),
       }));
@@ -54,6 +55,28 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       }
       toast.error("ワークスペースの更新に失敗しました");
     }
+  },
+
+  reorderWorkspaces: (orderedIds) => {
+    const updated = orderedIds.map((id, index) => ({ id, position: index }));
+    set((state) => {
+      const posMap = new Map(updated.map((u) => [u.id, u.position]));
+      return {
+        workspaces: [...state.workspaces].sort((a, b) => {
+          const pa = posMap.get(a.id) ?? a.position;
+          const pb = posMap.get(b.id) ?? b.position;
+          return pa - pb;
+        }).map((w) => {
+          const pos = posMap.get(w.id);
+          return pos !== undefined ? { ...w, position: pos } : w;
+        }),
+      };
+    });
+    updated.forEach(({ id, position }) => {
+      workspacesApi.updatePosition(id, position).catch(() => {
+        toast.error("ワークスペースの並び替えに失敗しました");
+      });
+    });
   },
 
   deleteWorkspace: (id) => {

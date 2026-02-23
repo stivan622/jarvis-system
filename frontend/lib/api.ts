@@ -113,6 +113,12 @@ export const workspacesApi = {
       ...body(data as Record<string, unknown>, "workspace"),
     });
   },
+  updatePosition(id: string, position: number): Promise<Workspace> {
+    return request<Workspace>(`/api/v1/workspaces/${id}`, {
+      method: "PATCH",
+      ...body({ position } as Record<string, unknown>, "workspace"),
+    });
+  },
   delete(id: string): Promise<void> {
     return request<void>(`/api/v1/workspaces/${id}`, { method: "DELETE" });
   },
@@ -131,7 +137,7 @@ export const projectsApi = {
       ...body(data as unknown as Record<string, unknown>, "project"),
     });
   },
-  update(id: string, data: Pick<Project, "name">): Promise<Project> {
+  update(id: string, data: Partial<Pick<Project, "name" | "workspaceId" | "position">>): Promise<Project> {
     return request<Project>(`/api/v1/projects/${id}`, {
       method: "PATCH",
       ...body(data as Record<string, unknown>, "project"),
@@ -145,14 +151,16 @@ export const projectsApi = {
 // ----- Tasks -----
 
 export const tasksApi = {
-  list(params?: { projectId?: string; thisWeek?: boolean }): Promise<Task[]> {
+  list(params?: { projectId?: string; thisWeek?: boolean; parentTaskId?: string; rootOnly?: boolean }): Promise<Task[]> {
     const qs = new URLSearchParams();
     if (params?.projectId) qs.set("project_id", params.projectId);
     if (params?.thisWeek) qs.set("this_week", "true");
+    if (params?.parentTaskId) qs.set("parent_task_id", params.parentTaskId);
+    if (params?.rootOnly) qs.set("root_only", "true");
     const q = qs.toString();
     return request<Task[]>(`/api/v1/tasks${q ? `?${q}` : ""}`);
   },
-  create(data: Pick<Task, "projectId" | "title">): Promise<Task> {
+  create(data: Pick<Task, "projectId" | "title"> & { parentTaskId?: string }): Promise<Task> {
     return request<Task>("/api/v1/tasks", {
       method: "POST",
       ...body(data as unknown as Record<string, unknown>, "task"),
@@ -160,7 +168,7 @@ export const tasksApi = {
   },
   update(
     id: string,
-    data: Partial<Pick<Task, "title" | "done" | "thisWeek">>
+    data: Partial<Pick<Task, "title" | "done" | "thisWeek" | "projectId" | "position">>
   ): Promise<Task> {
     return request<Task>(`/api/v1/tasks/${id}`, {
       method: "PATCH",
