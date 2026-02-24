@@ -8,6 +8,7 @@ import { useTaskStore } from "@/lib/store/task-store";
 import { useProjectStore } from "@/lib/store/project-store";
 import { useScheduleStore } from "@/lib/store/schedule-store";
 import { useGoogleCalendarStore } from "@/lib/store/google-calendar-store";
+import { useWorkspaceStore } from "@/lib/store/workspace-store";
 import { Task } from "@/lib/types";
 import { GoogleCalendarPanel } from "@/components/schedule/google-calendar-panel";
 
@@ -123,10 +124,12 @@ function TaskDragItem({ task, isScheduled }: { task: Task; isScheduled: boolean 
 export function TaskPanel() {
   const { tasks, loading: tkLoading, init: tkInit } = useTaskStore();
   const { projects, loading: pjLoading, init: pjInit } = useProjectStore();
+  const { workspaces, loading: wsLoading, init: wsInit } = useWorkspaceStore();
   const { events } = useScheduleStore();
   const { events: gcalEvents } = useGoogleCalendarStore();
 
   useEffect(() => {
+    wsInit();
     tkInit();
     pjInit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -215,7 +218,10 @@ export function TaskPanel() {
       ? Math.round((remainingMinutes / taskAvailableMinutes) * 100)
       : 0;
 
-  const thisWeekTasks = useMemo(() => tasks.filter((t) => t.thisWeek), [tasks]);
+  const thisWeekTasks = useMemo(
+    () => tasks.filter((t) => t.thisWeek).sort((a, b) => a.position - b.position),
+    [tasks]
+  );
   const doneCount = useMemo(
     () => thisWeekTasks.filter((t) => t.done).length,
     [thisWeekTasks]
@@ -223,7 +229,7 @@ export function TaskPanel() {
   const total = thisWeekTasks.length;
   const progressPct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
 
-  const projectMap = useMemo(
+  const projectNameMap = useMemo(
     () => new Map(projects.map((p) => [p.id, p.name])),
     [projects]
   );
@@ -234,10 +240,23 @@ export function TaskPanel() {
       const existing = map.get(task.projectId) ?? [];
       map.set(task.projectId, [...existing, task]);
     }
-    return Array.from(map.entries());
-  }, [thisWeekTasks]);
+    // workspaces 配列の順序 → その workspace の projects 配列の順序、で並べる
+    // (project-section / workspace-sidebar と同じ配列順ベースの並び順)
+    const orderedProjectIds: string[] = [];
+    for (const ws of workspaces) {
+      for (const project of projects) {
+        if (project.workspaceId === ws.id) {
+          orderedProjectIds.push(project.id);
+        }
+      }
+    }
+    const projectOrderMap = new Map(orderedProjectIds.map((id, i) => [id, i]));
+    return Array.from(map.entries()).sort(
+      ([aId], [bId]) => (projectOrderMap.get(aId) ?? Infinity) - (projectOrderMap.get(bId) ?? Infinity)
+    );
+  }, [thisWeekTasks, projects, workspaces]);
 
-  if (tkLoading || pjLoading) return <TaskPanelSkeleton />;
+  if (tkLoading || pjLoading || wsLoading) return <TaskPanelSkeleton />;
 
   return (
     <div className="flex h-full w-64 flex-shrink-0 flex-col overflow-hidden border-r bg-background">
@@ -333,7 +352,7 @@ export function TaskPanel() {
             {grouped.map(([projectId, projectTasks]) => (
               <div key={projectId}>
                 <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-                  {projectMap.get(projectId) ?? "—"}
+                  {projectNameMap.get(projectId) ?? "—"}
                 </p>
                 {projectTasks.map((task) => (
                   <TaskDragItem

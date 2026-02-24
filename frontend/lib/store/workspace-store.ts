@@ -10,6 +10,7 @@ interface WorkspaceStore {
   createWorkspace: (data: Pick<Workspace, "name">) => Promise<Workspace>;
   updateWorkspace: (id: string, data: Pick<Workspace, "name">) => Promise<void>;
   deleteWorkspace: (id: string) => void;
+  reorderWorkspaces: (ids: string[]) => void;
   getWorkspace: (id: string) => Workspace | undefined;
 }
 
@@ -66,6 +67,17 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
         set((state) => ({ workspaces: [...state.workspaces, old] }));
       }
       toast.error("ワークスペースの削除に失敗しました");
+    });
+  },
+
+  reorderWorkspaces: (ids) => {
+    const prev = get().workspaces;
+    const map = new Map(prev.map((w) => [w.id, w]));
+    const reordered = ids.map((id, i) => ({ ...map.get(id)!, position: i }));
+    set({ workspaces: reordered });
+    workspacesApi.reorder(ids).catch(() => {
+      set({ workspaces: prev });
+      toast.error("並び替えに失敗しました");
     });
   },
 

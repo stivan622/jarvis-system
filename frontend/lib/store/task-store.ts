@@ -13,6 +13,7 @@ interface TaskStore {
   /** Backend cascades, so these are local-state cleanup only. */
   deleteTasksByProject: (projectId: string) => void;
   deleteTasksByProjects: (projectIds: string[]) => void;
+  reorderTasks: (ids: string[]) => void;
 }
 
 export const useTaskStore = create<TaskStore>((set, get) => ({
@@ -77,5 +78,17 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     set((state) => ({
       tasks: state.tasks.filter((t) => !ids.has(t.projectId)),
     }));
+  },
+
+  reorderTasks: (ids) => {
+    const prev = get().tasks;
+    const map = new Map(prev.map((t) => [t.id, t]));
+    const reordered = ids.map((id, i) => ({ ...map.get(id)!, position: i }));
+    const others = prev.filter((t) => !ids.includes(t.id));
+    set({ tasks: [...others, ...reordered] });
+    tasksApi.reorder(ids).catch(() => {
+      set({ tasks: prev });
+      toast.error("並び替えに失敗しました");
+    });
   },
 }));

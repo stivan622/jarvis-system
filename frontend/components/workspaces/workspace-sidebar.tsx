@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, KeyboardEvent } from "react";
-import { Plus, Trash2, Layers, LayoutGrid } from "lucide-react";
+import { Plus, Trash2, Layers, LayoutGrid, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useWorkspaceStore } from "@/lib/store/workspace-store";
@@ -10,6 +10,21 @@ import { useTaskStore } from "@/lib/store/task-store";
 import { WorkspaceDeleteDialog } from "./workspace-delete-dialog";
 import { InlineEdit } from "@/components/shared/inline-edit";
 import { Workspace } from "@/lib/types";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 export const ALL_WORKSPACES_ID = "__all__";
 
@@ -18,8 +33,73 @@ interface WorkspaceSidebarProps {
   onSelect: (id: string) => void;
 }
 
+interface SortableWorkspaceItemProps {
+  ws: Workspace;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  onDelete: (ws: Workspace) => void;
+  onSave: (id: string, name: string) => void;
+}
+
+function SortableWorkspaceItem({ ws, selectedId, onSelect, onDelete, onSave }: SortableWorkspaceItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: ws.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+        selectedId === ws.id
+          ? "bg-accent text-accent-foreground"
+          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+      )}
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        className="flex-shrink-0 cursor-grab opacity-0 group-hover:opacity-40 hover:!opacity-70 active:cursor-grabbing"
+        tabIndex={-1}
+      >
+        <GripVertical className="h-3.5 w-3.5" />
+      </button>
+
+      <button
+        className="min-w-0 flex-1 text-left"
+        onClick={() => onSelect(ws.id)}
+      >
+        <InlineEdit
+          value={ws.name}
+          onSave={(name) => onSave(ws.id, name)}
+          placeholder="名前なし"
+          className="text-sm font-medium"
+        />
+      </button>
+      <button
+        className="flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 hover:text-destructive"
+        onClick={(e) => { e.stopPropagation(); onDelete(ws); }}
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
 export function WorkspaceSidebar({ selectedId, onSelect }: WorkspaceSidebarProps) {
-  const { workspaces, createWorkspace, updateWorkspace, deleteWorkspace } = useWorkspaceStore();
+  const { workspaces, createWorkspace, updateWorkspace, deleteWorkspace, reorderWorkspaces } = useWorkspaceStore();
   const { projects, deleteProjectsByWorkspace } = useProjectStore();
   const { deleteTasksByProjects } = useTaskStore();
 
@@ -27,6 +107,10 @@ export function WorkspaceSidebar({ selectedId, onSelect }: WorkspaceSidebarProps
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const newInputRef = useRef<HTMLInputElement>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
 
   useEffect(() => {
     if (adding) newInputRef.current?.focus();
@@ -64,6 +148,16 @@ export function WorkspaceSidebar({ selectedId, onSelect }: WorkspaceSidebarProps
     setDeleteTarget(null);
   }
 
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = workspaces.findIndex((w) => w.id === active.id);
+    const newIndex = workspaces.findIndex((w) => w.id === over.id);
+    const reordered = arrayMove(workspaces, oldIndex, newIndex);
+    reorderWorkspaces(reordered.map((w) => w.id));
+  }
+
   return (
     <aside className="flex h-full w-56 flex-shrink-0 flex-col border-r bg-muted/30">
       <div className="flex items-center gap-2 px-4 py-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
@@ -89,35 +183,27 @@ export function WorkspaceSidebar({ selectedId, onSelect }: WorkspaceSidebarProps
         <div className="my-1 border-t" />
 
         {/* 個別 Workspace */}
-        {workspaces.map((ws) => (
-          <div
-            key={ws.id}
-            className={cn(
-              "group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-              selectedId === ws.id
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-            )}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={workspaces.map((w) => w.id)}
+            strategy={verticalListSortingStrategy}
           >
-            <button
-              className="min-w-0 flex-1 text-left"
-              onClick={() => onSelect(ws.id)}
-            >
-              <InlineEdit
-                value={ws.name}
-                onSave={(name) => updateWorkspace(ws.id, { name })}
-                placeholder="名前なし"
-                className="text-sm font-medium"
+            {workspaces.map((ws) => (
+              <SortableWorkspaceItem
+                key={ws.id}
+                ws={ws}
+                selectedId={selectedId}
+                onSelect={onSelect}
+                onDelete={(ws) => setDeleteTarget(ws)}
+                onSave={(id, name) => updateWorkspace(id, { name })}
               />
-            </button>
-            <button
-              className="flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100 hover:text-destructive"
-              onClick={(e) => { e.stopPropagation(); setDeleteTarget(ws); }}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ))}
+            ))}
+          </SortableContext>
+        </DndContext>
 
         {/* 新規追加 */}
         {adding ? (

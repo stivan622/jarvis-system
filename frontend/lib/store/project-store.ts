@@ -12,6 +12,7 @@ interface ProjectStore {
   deleteProject: (id: string) => void;
   /** Backend cascades, so this is local-state cleanup only. Returns removed project IDs. */
   deleteProjectsByWorkspace: (workspaceId: string) => string[];
+  reorderProjects: (ids: string[]) => void;
 }
 
 export const useProjectStore = create<ProjectStore>((set, get) => ({
@@ -78,5 +79,17 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       projects: state.projects.filter((p) => p.workspaceId !== workspaceId),
     }));
     return ids;
+  },
+
+  reorderProjects: (ids) => {
+    const prev = get().projects;
+    const map = new Map(prev.map((p) => [p.id, p]));
+    const reordered = ids.map((id, i) => ({ ...map.get(id)!, position: i }));
+    const others = prev.filter((p) => !ids.includes(p.id));
+    set({ projects: [...others, ...reordered] });
+    projectsApi.reorder(ids).catch(() => {
+      set({ projects: prev });
+      toast.error("並び替えに失敗しました");
+    });
   },
 }));

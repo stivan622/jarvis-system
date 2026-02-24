@@ -116,6 +116,12 @@ export const workspacesApi = {
   delete(id: string): Promise<void> {
     return request<void>(`/api/v1/workspaces/${id}`, { method: "DELETE" });
   },
+  reorder(ids: string[]): Promise<void> {
+    return request<void>("/api/v1/workspaces/reorder", {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    });
+  },
 };
 
 // ----- Projects -----
@@ -139,6 +145,12 @@ export const projectsApi = {
   },
   delete(id: string): Promise<void> {
     return request<void>(`/api/v1/projects/${id}`, { method: "DELETE" });
+  },
+  reorder(ids: string[]): Promise<void> {
+    return request<void>("/api/v1/projects/reorder", {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    });
   },
 };
 
@@ -169,6 +181,12 @@ export const tasksApi = {
   },
   delete(id: string): Promise<void> {
     return request<void>(`/api/v1/tasks/${id}`, { method: "DELETE" });
+  },
+  reorder(ids: string[]): Promise<void> {
+    return request<void>("/api/v1/tasks/reorder", {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    });
   },
 };
 

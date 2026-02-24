@@ -3,11 +3,19 @@ module Api
     class ProjectsController < BaseController
       def index
         projects = if params[:workspace_id]
-          Project.where(workspace_id: params[:workspace_id]).order(:created_at)
+          Project.where(workspace_id: params[:workspace_id]).order(:position, :created_at)
         else
-          Project.order(:created_at)
+          Project.order(:position, :created_at)
         end
         render json: projects
+      end
+
+      def reorder
+        ids = params.require(:ids)
+        ids.each_with_index do |id, index|
+          Project.where(id: id).update_all(position: index)
+        end
+        head :no_content
       end
 
       def show

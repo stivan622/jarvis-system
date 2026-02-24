@@ -1,6 +1,7 @@
 export interface Workspace {
   id: string;
   name: string;
+  position: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -9,6 +10,7 @@ export interface Project {
   id: string;
   workspaceId: string;
   name: string;
+  position: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -19,6 +21,7 @@ export interface Task {
   title: string;
   done: boolean;
   thisWeek: boolean;
+  position: number;
   createdAt: string;
   updatedAt: string;
 }

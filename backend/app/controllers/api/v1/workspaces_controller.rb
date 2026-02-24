@@ -2,8 +2,16 @@ module Api
   module V1
     class WorkspacesController < BaseController
       def index
-        workspaces = Workspace.order(:created_at)
+        workspaces = Workspace.order(:position, :created_at)
         render json: workspaces
+      end
+
+      def reorder
+        ids = params.require(:ids)
+        ids.each_with_index do |id, index|
+          Workspace.where(id: id).update_all(position: index)
+        end
+        head :no_content
       end
 
       def show

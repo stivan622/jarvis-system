@@ -5,7 +5,7 @@ module Api
         tasks = Task.all
         tasks = tasks.where(project_id: params[:project_id]) if params[:project_id]
         tasks = tasks.where(this_week: true) if params[:this_week] == "true"
-        render json: tasks.order(:created_at)
+        render json: tasks.order(:position, :created_at)
       end
 
       def show
@@ -25,6 +25,14 @@ module Api
 
       def destroy
         find_task.destroy!
+        head :no_content
+      end
+
+      def reorder
+        ids = params.require(:ids)
+        ids.each_with_index do |id, index|
+          Task.where(id: id).update_all(position: index)
+        end
         head :no_content
       end
 
