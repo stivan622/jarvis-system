@@ -220,6 +220,7 @@ function AccountRow({ account }: { account: GoogleCalendarAccount }) {
 export function GoogleCalendarPanel() {
   const { accounts, loadingAccounts, initAccounts, connectAccount } = useGoogleCalendarStore();
   const [connecting, setConnecting] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   useEffect(() => {
     initAccounts();
@@ -235,60 +236,75 @@ export function GoogleCalendarPanel() {
   return (
     <div className="flex flex-shrink-0 flex-col border-t">
       {/* ヘッダー */}
-      <div className="flex items-center gap-2 px-4 py-2.5">
-        <GoogleIcon className="h-3.5 w-3.5 flex-shrink-0" />
-        <span className="text-xs font-semibold">Googleカレンダー</span>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="ml-auto h-6 w-6 p-0"
-          onClick={handleConnect}
-          disabled={connecting}
-          title="アカウントを追加"
+      <div className="flex items-center gap-2 px-3 py-2">
+        <button
+          onClick={() => setCollapsed((c) => !c)}
+          className="flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-0.5 text-left transition-colors hover:bg-accent/50"
         >
-          {connecting ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Plus className="h-3.5 w-3.5" />
-          )}
-        </Button>
-      </div>
-
-      {/* アカウント一覧 */}
-      <div className="px-3 pb-3 space-y-2">
-        {loadingAccounts ? (
-          <>
-            <Skeleton className="h-16 w-full rounded-md" />
-          </>
-        ) : accounts.length === 0 ? (
-          <div className="rounded-md border border-dashed p-3 text-center">
-            <GoogleIcon className="mx-auto mb-1.5 h-5 w-5" />
-            <p className="text-xs text-muted-foreground">
-              Googleアカウントを連携すると
-              <br />
-              カレンダーが表示されます
-            </p>
-            <Button
-              size="sm"
-              variant="outline"
-              className="mt-2 h-7 text-xs"
-              onClick={handleConnect}
-              disabled={connecting}
-            >
-              {connecting ? (
-                <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-              ) : (
-                <GoogleIcon className="mr-1.5 h-3 w-3" />
-              )}
-              アカウントを連携
-            </Button>
-          </div>
-        ) : (
-          accounts.map((account) => (
-            <AccountRow key={account.id} account={account} />
-          ))
+          <GoogleIcon className="h-3.5 w-3.5 flex-shrink-0" />
+          <span className="text-xs font-semibold">Googleカレンダー</span>
+          <ChevronDown
+            className={cn(
+              "ml-auto h-3 w-3 flex-shrink-0 text-muted-foreground transition-transform duration-200",
+              collapsed && "-rotate-90"
+            )}
+          />
+        </button>
+        {!collapsed && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 flex-shrink-0 p-0"
+            onClick={handleConnect}
+            disabled={connecting}
+            title="アカウントを追加"
+          >
+            {connecting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Plus className="h-3.5 w-3.5" />
+            )}
+          </Button>
         )}
       </div>
+
+      {/* アカウント一覧（折り畳み可能） */}
+      {!collapsed && (
+        <div className="px-3 pb-3 space-y-2">
+          {loadingAccounts ? (
+            <>
+              <Skeleton className="h-16 w-full rounded-md" />
+            </>
+          ) : accounts.length === 0 ? (
+            <div className="rounded-md border border-dashed p-3 text-center">
+              <GoogleIcon className="mx-auto mb-1.5 h-5 w-5" />
+              <p className="text-xs text-muted-foreground">
+                Googleアカウントを連携すると
+                <br />
+                カレンダーが表示されます
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2 h-7 text-xs"
+                onClick={handleConnect}
+                disabled={connecting}
+              >
+                {connecting ? (
+                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                ) : (
+                  <GoogleIcon className="mr-1.5 h-3 w-3" />
+                )}
+                アカウントを連携
+              </Button>
+            </div>
+          ) : (
+            accounts.map((account) => (
+              <AccountRow key={account.id} account={account} />
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }
